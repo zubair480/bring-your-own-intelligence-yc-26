@@ -1,0 +1,3 @@
+{"line": "- 2026-09-27 16:01 \u2014 Zubair: P-102 (pump_p102) \u2014 \"show running state per our standard\" \u2192 runFill #4A4A48, runLabel RUN, faultColor #E0301E", "gbrain": true}
+{"line": "- 2026-09-27 16:12 \u2014 Zubair: P-102 (P102) \u2014 \"Add speed % and amps under the pump\" \u2192 showSpeed on, showAmps on", "gbrain": true}
+{"line": "- 2026-09-27 16:12 \u2014 Zubair: P-102 (P102) \u2014 \"Show running state per our standard\" \u2192 runFill #4A4A48, runLabel RUN, faultColor #E0301E", "gbrain": true}
