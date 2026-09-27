@@ -142,7 +142,7 @@ function Bar({ pct, color }: { pct: number; color?: string }) {
   return <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} /></div>
 }
 
-function Kpi({ id, s, icon, label, value, n, pct, meta }: { id: string; s: S; icon: string; label: string; value: string; n: number; pct: number; meta: string }) {
+function Kpi({ id, s, icon, label, value, n, pct, meta }: { id: string; s: S; icon: string; label: string; value: string; n: number; pct: number; meta?: string }) {
   const p = P(s, id)
   const warn = typeof p.warnAbove === 'number' && n > p.warnAbove
   return (
@@ -184,7 +184,8 @@ function Ring({ s }: { s: S }) {
   }
   return (
     <Card id={id} s={s} className={`card ring${alarm ? ' alarm' : ''}`}>
-      <Head icon="gauge" title={nameOf(p, id)} meta={<span className={alarm ? 'ring-f hi' : 'ring-f'}>{alarm ? `Level high · HI ${hi}` : 'Normal'}</span>} />
+      <Head icon="gauge" title={nameOf(p, id)} />
+      <div className={alarm ? 'ring-f hi' : 'ring-f'}>{alarm ? `Level high · HI ${hi}` : 'Normal'}</div>
       <div className="ring-w">
         <svg viewBox="0 0 100 100">
           <circle cx={50} cy={50} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={8} />
@@ -240,7 +241,7 @@ function Alarms({ s }: { s: S }) {
   const shown = ALARMS.filter((a) => a.rank >= min)
   return (
     <Card id="alarms" s={s} className="card alarms">
-      <Head icon="alarm" title={<>{str(p.label) ?? 'Active alarms'} <b className="count">{shown.length}</b></>}
+      <Head icon="alarm" title={<>{str(p.label) ?? <><span className="al-x">Active </span>Alarms</>} <b className="count">{shown.length}</b></>}
         meta={p.showAckAll ? <span className="ack">Ack all</span> : `≥ ${String(p.minPriority)}`} />
       <div className="alist">
         {shown.map((a) => (
@@ -372,7 +373,7 @@ function Trend({ s }: { s: S }) {
   const amps = trend1.map((v) => 34 + (v - 55) * 0.6)
   return (
     <Card id="trend" s={s} className="card trend">
-      <Head icon="trend" title={`${str(p.label) ?? 'Levels'} · last ${range}`} />
+      <Head icon="trend" title={<>{str(p.label) ?? 'Levels'} · <span className="tr-x">last </span>{range}</>} />
       <div className="legend">
         <span><i className="lg l1" />T-101</span>
         <span><i className="lg l2" />T-102</span>
@@ -401,7 +402,7 @@ export default function Screen(s: S & { feed: ReactNode }) {
   const flowPct = (plant.flow / 2000) * 100
   return (
     <main className="bento" onClick={() => s.onSelect('')}>
-      <div className="b-kp"><Kpi id="kpi_pumps" s={s} icon="pump" label="Pumps running" value={`${running} / 3`} n={running} pct={(running / 3) * 100} meta="Station 01" /></div>
+      <div className="b-kp"><Kpi id="kpi_pumps" s={s} icon="pump" label="Pumps" value={`${running} / 3`} n={running} pct={(running / 3) * 100} /></div>
       <div className="b-kf"><Kpi id="kpi_flow" s={s} icon="flow" label="Discharge flow" value={fmt(plant.flow)} n={plant.flow} pct={flowPct} meta="Live" /></div>
       <div className="b-kl card" onClick={(e) => e.stopPropagation()}>
         <Head icon="tank" title="Tank levels" meta="HI 85" />

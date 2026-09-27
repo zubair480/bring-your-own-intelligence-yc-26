@@ -1,0 +1,42 @@
+{
+  "audited_at_utc": "2026-09-27T23:33:59.201014+00:00",
+  "checkpoint": "river://a88cc64d-4dd0-4936-88cb-53e81bad4b9b/sampler_weights/faceplate-20260927T232807Z-inf",
+  "base_model": "Qwen/Qwen3.8-27B-FP8",
+  "component": {
+    "id": "audit-pump-p101",
+    "type": "ia.symbol.pump",
+    "path": "root/Pump_P101",
+    "name": "Pump_P101",
+    "props": {}
+  },
+  "instruction": "Make the running state green and show speed.",
+  "rules": [
+    "P-101: Demo seed data for Faceplate (YC hackathon, 2026-09-27).\n\n# P-101\n\n75 HP centrifugal pump at Pump Station 01, [[company/bayview-water]]. Owner: [[people/dev-patel]].\n\n## Tags\n- `[default]Station01/P-101/Running`\n- `[default]Station01/P-101/Fault`\n- `[default]Station01/P-101/SpeedPct`\n- `[default]Station01/P-101/Amps`\n\n(See [[plant/station-01-tags]].)\n\n## Screen standard\nRunning = dark gray #4A4A48 fill with a white \"RUN\" label. Fault = red #E0301E. Never green ([[hmi/style-guide]]).\n\n## Status\nLead duty pump. No open issues. Takes duty when [[plant/equipment/p-103]] is down.\n\nDuty changes follow [[sops/pump-changeover]]. Pumps discharge through [[plant/equipment/v-201]] and are metered at [[plant/equipment/ft-301]].\n\n## Facts\n\n<!--- gbrain:facts:begin -->\n| # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |\n|---|-------|------|------------|------------|------------|------------|-------------|--------|---------|\n<!--- gbrain:facts:end -->",
+    "P-102: Demo seed data for Faceplate (YC hackathon, 2026-09-27).\n\n# P-102\n\n75 HP centrifugal pump at Pump Station 01, [[company/bayview-water]]. Owner: [[people/dev-patel]].\n\n## Tags\n- `[default]Station01/P-102/Running`\n- `[default]Station01/P-102/Fault`\n- `[default]Station01/P-102/SpeedPct`\n- `[default]Station01/P-102/Amps`\n\n(See [[plant/station-01-tags]].)\n\n## Screen standard\nRunning = dark gray #4A4A48 fill with a white \"RUN\" label. Fault = red #E0301E. Never green ([[hmi/style-guide]]).\n\n## Status\nLag pump. No open issues. Its faceplate was the first one rebuilt to the standard with Faceplate on 2026-09-27 ([[decisions/log]]).\n\nDuty changes follow [[sops/pump-changeover]]. Pumps discharge through [[plant/equipment/v-201]] and are metered at [[plant/equipment/ft-301]].",
+    "P-103: Demo seed data for Faceplate (YC hackathon, 2026-09-27).\n\n# P-103\n\n75 HP centrifugal pump at Pump Station 01, [[company/bayview-water]]. Owner: [[people/dev-patel]].\n\n## Tags\n- `[default]Station01/P-103/Running`\n- `[default]Station01/P-103/Fault`\n- `[default]Station01/P-103/SpeedPct`\n- `[default]Station01/P-103/Amps`\n\n(See [[plant/station-01-tags]].)\n\n## Screen standard\nRunning = dark gray #4A4A48 fill with a white \"RUN\" label. Fault = red #E0301E. Never green ([[hmi/style-guide]]).\n\n## Motor fault history\n- 2026-06-18: motor bearing fault, `Fault` tripped at high amps. Bearing greased, returned to service.\n- 2026-08-29: second motor bearing fault, vibration and high `Amps`.\n- **Bearing replacement scheduled 2026-10-04.** Until then P-103 runs as standby only.\n\nOwner [[people/dev-patel]] knows the full history. Operators should watch `Amps` and switch to [[plant/equipment/p-101]] using [[sops/pump-changeover]] if it climbs.\n\nDuty changes follow [[sops/pump-changeover]]. Pumps discharge through [[plant/equipment/v-201]] and are metered at [[plant/equipment/ft-301]]."
+  ],
+  "rules_cited": [
+    {
+      "slug": "plant/equipment/p-101",
+      "title": "P-101",
+      "snippet": "Running = dark gray #4A4A48 fill with a white \"RUN\" label. Fault = red #E0301E. Never green ([[hmi/style-guide]])."
+    },
+    {
+      "slug": "plant/equipment/p-102",
+      "title": "P-102",
+      "snippet": "Lag pump. No open issues. Its faceplate was the first one rebuilt to the standard with Faceplate on 2026-09-27 ([[decisions/log]])."
+    },
+    {
+      "slug": "plant/equipment/p-103",
+      "title": "P-103",
+      "snippet": "Owner [[people/dev-patel]] knows the full history. Operators should watch `Amps` and switch to [[plant/equipment/p-101]] using [[sops/pump-changeover]] if it climbs."
+    }
+  ],
+  "raw_model_text": "{\"runFill\": \"#4A4A48\", \"showSpeed\": true}",
+  "parsed_patch": {
+    "runFill": "#4A4A48",
+    "showSpeed": true
+  },
+  "elapsed_s": 54.217,
+  "server_validation_applied": false
+}

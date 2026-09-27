@@ -52,8 +52,14 @@ function usePlant(): Plant {
 
 interface Rule { slug: string; title?: string; snippet: string }
 type Kind = 'patch' | 'answer'
-interface EditResp { kind?: Kind; patch?: Record<string, unknown>; answer?: string; rationale?: string; rules_cited?: Rule[]; model: string; latency_ms: number }
-interface AcceptResp { ok: boolean; gbrain_logged: boolean; logged_line: string; pairs_total: number; next_train_in: number }
+interface TraceStep { step?: string; target?: string; detail?: string; ms?: number }
+interface EditResp { kind?: Kind; patch?: Record<string, unknown>; answer?: string; rationale?: string; rules_cited?: Rule[]; model: string; latency_ms: number; trace?: TraceStep[] }
+interface AcceptResp { ok: boolean; gbrain_logged: boolean; logged_line: string; pairs_total: number; next_train_in: number; gbrain_write?: { page?: string; line?: string; ok?: boolean }; pairs_file?: string; pair_index?: number }
+interface Stats { pairs_total?: number; next_train_in?: number; model?: string; river_ready?: boolean }
+interface ToastRow { text: string; mono?: boolean }
+interface Toast { id: number; err?: boolean; title: string; rows: ToastRow[] }
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const pairsPath = (f?: string) => (typeof f === 'string' && f ? f.split('\\').join('/').replace(/^.*?(server\/)/, '$1') : 'server/data/pairs.jsonl')
 interface Health { ok: boolean; gbrain: boolean; model: string }
 
 const MODEL_LABEL: Record<string, string> = {
@@ -116,7 +122,10 @@ export default function App() {
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
-  const [train, setTrain] = useState<{ pairs: number; next: number } | null>(null)
+  const [train, setTrain] = useState<{ pairs: number | null; next: number | null } | null>(null)
+  const [toast, setToast] = useState<Toast | null>(null)
+  const toastId = useRef(1)
+  const showToast = (t: Omit<Toast, 'id'>) => setToast({ ...t, id: toastId.current++ })
   const [tuned, setTuned] = useState(true)
   const [lastModel, setLastModel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -153,6 +162,38 @@ export default function App() {
     const id = setInterval(poll, 10000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast((t) => (t?.id === toast.id ? null : t)), 7000)
+    return () => clearTimeout(id)
+  }, [toast])
+
+  const loadStats = useCallback(async () => {
+    try {
+      const r = await fetch('/api/stats')
+      if (!r.ok) return false
+      const st = (await r.json()) as Stats
+      const pairs = isNum(st.pairs_total) ? st.pairs_total : null
+      const next = isNum(st.next_train_in) ? st.next_train_in : null
+      if (pairs === null && next === null) return false
+      setTrain((t) => ({ pairs: pairs ?? t?.pairs ?? null, next: next ?? t?.next ?? null }))
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    let done = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      const ok = await loadStats()
+      if (!ok && !done) timer = setTimeout(tick, 10000)
+    }
+    tick()
+    return () => { done = true; if (timer) clearTimeout(timer) }
+  }, [loadStats])
 
   const patchReq = (id: number, fn: (r: Req) => Req) => setReqs((rs) => rs.map((r) => (r.id === id ? fn(r) : r)))
   const setStep = (id: number, key: string, s: Partial<Step>) =>
@@ -196,6 +237,15 @@ export default function App() {
         ? { state: 'done', label: 'Answered', t: clock() }
         : { state: 'done', detail: `${changed} prop${changed === 1 ? '' : 's'} changed`, t: clock() })
       setLastModel(r.model)
+      const rows: ToastRow[] = [{ text: `→ Backend  ${location.origin}/api/edit` }]
+      const trace = Array.isArray(r.trace) ? r.trace.filter((t) => t && (t.target || t.step)) : []
+      if (trace.length) {
+        for (const t of trace) rows.push({ text: `→ ${t.target || t.step}${t.detail ? ` — ${t.detail}` : ''}${isNum(t.ms) ? ` · ${Math.round(t.ms)} ms` : ''}` })
+      } else {
+        rows.push({ text: `→ GBrain search · ${n} rule${n === 1 ? '' : 's'}` })
+        rows.push({ text: `→ ${modelLabel(r.model)}${isNum(r.latency_ms) ? ` · ${r.latency_ms} ms` : ''}` })
+      }
+      showToast({ title: 'Sent ✓', rows })
       if (selRef.current === comp.id) {
         setResult({ kind, patch, answer, rationale: r.rationale ?? '', rules_cited: rules, model: r.model, latency_ms: r.latency_ms, reqId: id, comp, before, instruction })
       } else {
@@ -208,6 +258,7 @@ export default function App() {
       setStep(id, 'model', { state: 'err', label: 'GBrain think — failed', detail: msg, t: clock() })
       patchReq(id, (r) => ({ ...r, active: false }))
       if (selRef.current === comp.id) setError(msg)
+      showToast({ err: true, title: 'Request failed', rows: [{ text: `→ ${location.origin}/api/edit` }, { text: msg }] })
     } finally {
       setPending(false)
       setWait(null)
@@ -237,11 +288,22 @@ export default function App() {
       const r = await post<AcceptResp>('/api/accept', { pin: false, component_id: comp.id, component_name: comp.name, instruction, patch, author: 'Zubair' })
       setStep(reqId, 'log', { state: 'done', detail: r.gbrain_logged ? undefined : 'local copy only', t: clock() })
       addSteps(reqId, [{ key: 'pair', label: `Training pair #${r.pairs_total}`, detail: `next LoRA step in ${r.next_train_in}`, state: 'done', t: clock() }])
-      setTrain({ pairs: r.pairs_total, next: r.next_train_in })
+      setTrain((t) => ({ pairs: isNum(r.pairs_total) ? r.pairs_total : t?.pairs ?? null, next: isNum(r.next_train_in) ? r.next_train_in : t?.next ?? null }))
       setConfirm(`Applied to ${comp.name}. Logged to GBrain, saved as training pair #${r.pairs_total}.`)
+      const gw = r.gbrain_write && typeof r.gbrain_write === 'object' ? r.gbrain_write : null
+      const pairNo = isNum(r.pair_index) ? r.pair_index : isNum(r.pairs_total) ? r.pairs_total : null
+      const rows: ToastRow[] = [
+        { text: `page: ${gw?.page || 'decisions/log'}` },
+        { text: gw?.line || r.logged_line || 'logged', mono: true },
+      ]
+      if (pairNo !== null) rows.push({ text: `training pair #${pairNo} → ${pairsPath(r.pairs_file)}` })
+      showToast({ title: 'Saved to GBrain ✓', rows })
+      loadStats()
     } catch (e) {
-      setStep(reqId, 'log', { state: 'err', detail: e instanceof Error ? e.message : String(e), t: clock() })
+      const msg = e instanceof Error ? e.message : String(e)
+      setStep(reqId, 'log', { state: 'err', detail: msg, t: clock() })
       setConfirm(`Applied to ${comp.name}. Logging failed; see activity.`)
+      showToast({ err: true, title: 'Save failed', rows: [{ text: `→ ${location.origin}/api/accept` }, { text: msg }] })
     }
     patchReq(reqId, (r) => ({ ...r, active: false }))
   }
@@ -258,7 +320,7 @@ export default function App() {
   const current = sel ? { ...DEFAULTS[sel.id], ...props[sel.id] } : {}
   const activeModel = lastModel ?? health?.model
   const model = modelLabel(activeModel)
-  const k = train ? 8 - train.next : 0
+  const k = train && train.next !== null ? Math.max(0, Math.min(8, 8 - train.next)) : 0
   const elapsed = wait ? Math.max(0, (now - wait.start) / 1000) : 0
   const diffRows = result && result.kind === 'patch'
     ? Object.entries(result.patch).filter(([key, v]) => !same(result.before[key], v))
@@ -358,11 +420,11 @@ export default function App() {
           <span className="mb-v">{model}</span>
           <span className="sep" />
           <span className="mb-l">Pairs learned</span>
-          <span className="mb-n">{train ? train.pairs : '—'}</span>
+          <span className="mb-n">{train?.pairs ?? '—'}</span>
           <span className="sep" />
           <span className="mb-l">Next LoRA step</span>
           <span className="prog"><i style={{ width: `${(k / 8) * 100}%` }} /></span>
-          <span className="mb-n">{train ? `${k}/8` : '—/8'}</span>
+          <span className="mb-n">{train && train.next !== null ? `${k}/8` : '—/8'}</span>
           <div className="seg">
             <button className={!tuned ? 'on' : ''} onClick={() => setTuned(false)}>Base</button>
             <button className={tuned ? 'on' : ''} onClick={() => setTuned(true)}>Tuned</button>
@@ -476,6 +538,13 @@ export default function App() {
           )}
         </div>
       </aside>
+
+      {toast && (
+        <div key={toast.id} className={`toast${toast.err ? ' err' : ''}`} role="status" aria-live="polite" onClick={() => setToast(null)} title="Click to dismiss">
+          <div className="toast-t">{toast.title}</div>
+          {toast.rows.map((row, i) => <div key={i} className={`toast-r${row.mono ? ' mono' : ''}`}>{row.text}</div>)}
+        </div>
+      )}
     </div>
   )
 }
