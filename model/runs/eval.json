@@ -1,0 +1,1342 @@
+{
+  "generated_at": "2026-09-27T23:33:04.019541+00:00",
+  "base_model": "Qwen/Qwen3.8-27B-FP8",
+  "checkpoint": "river://a88cc64d-4dd0-4936-88cb-53e81bad4b9b/sampler_weights/faceplate-20260927T232807Z-inf",
+  "training": {
+    "run_id": "faceplate-20260927T232807Z",
+    "steps": 15,
+    "lr": 0.0002,
+    "rank": 16,
+    "batch_size": 8,
+    "loss_first": 1.5415489673614502,
+    "loss_last": 0.028584185987710953,
+    "losses": [
+      1.5415489673614502,
+      1.1187467575073242,
+      0.5576208829879761,
+      0.6408171057701111,
+      0.291286826133728,
+      0.17352020740509033,
+      0.4086255729198456,
+      0.24571861326694489,
+      0.2382061630487442,
+      0.07163460552692413,
+      0.08936889469623566,
+      0.05462164804339409,
+      0.09176908433437347,
+      0.050371624529361725,
+      0.028584185987710953
+    ],
+    "train_examples": 120
+  },
+  "learned": [
+    "Running state is dark grey #4A4A48, never green, even when the engineer asks for green.",
+    "Alarm-level highlights use #E0301E; warnings use #F5A623. No other colors.",
+    "Tags are [default]Station01/<Equip>/<Point> for real Station01 equipment only (P-101..P-103, T-101/T-102, V-201/V-202, FT-301). Equipment is read from the component name.",
+    "Each component type has a fixed set of patch keys; nothing else is emitted.",
+    "Units are always shown: labels carry units, and every threshold carries value + units + color.",
+    "Output is a bare JSON patch with no prose or code fences."
+  ],
+  "checks": {
+    "json": "output parses to a JSON object",
+    "keys": "only the patch keys allowed for this component type",
+    "no_green": "no green hex/rgb/color name anywhere",
+    "palette": "every color is #4A4A48, #E0301E or #F5A623",
+    "tags": "tag paths match [default]Station01/<Equip>/<Point> for real equipment",
+    "units": "labels and thresholds carry units",
+    "exact": "patch equals the reference patch",
+    "field_recall": "share of reference fields reproduced exactly"
+  },
+  "summary": {
+    "base": {
+      "n": 20,
+      "pass": 0.0,
+      "json": 1.0,
+      "keys": 0.0,
+      "no_green": 0.75,
+      "palette": 0.65,
+      "tags": 0.7,
+      "units": 0.6,
+      "exact": 0.0,
+      "field_recall": 0.0,
+      "errors": 0
+    },
+    "tuned": {
+      "n": 20,
+      "pass": 0.7,
+      "json": 1.0,
+      "keys": 0.8,
+      "no_green": 1.0,
+      "palette": 0.95,
+      "tags": 0.95,
+      "units": 0.95,
+      "exact": 0.65,
+      "field_recall": 0.8708333333333333,
+      "errors": 0
+    }
+  },
+  "examples": [
+    {
+      "id": "eval-001",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "FeedPump-P-102"
+      },
+      "instruction": "Operators want a green pump symbol whenever it is on.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "runFill": "#4A4A48"
+      },
+      "base": {
+        "id": "eval-001",
+        "raw": "{\n  \"color\": \"green\",\n  \"visible\": true\n}",
+        "error": null,
+        "patch": {
+          "color": "green",
+          "visible": true
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": false,
+          "palette": false,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.99
+      },
+      "tuned": {
+        "id": "eval-001",
+        "raw": "{\"runFill\": \"#4A4A48\"}",
+        "error": null,
+        "patch": {
+          "runFill": "#4A4A48"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 14.31
+      }
+    },
+    {
+      "id": "eval-002",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "Sym_P101"
+      },
+      "instruction": "Paint the run state #00FF00 please.",
+      "rules": [
+        "Plant HMI standard",
+        "Bind only to existing tags"
+      ],
+      "reference": {
+        "runFill": "#4A4A48"
+      },
+      "base": {
+        "id": "eval-002",
+        "raw": "{\n  \"style\": {\n    \"fill\": {\n      \"value\": \"#00FF00\",\n      \"when\": {\n        \"tag\": \"P101_Run\",\n        \"value\": true\n      }\n    }\n  }\n}",
+        "error": null,
+        "patch": {
+          "style": {
+            "fill": {
+              "value": "#00FF00",
+              "when": {
+                "tag": "P101_Run",
+                "value": true
+              }
+            }
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": false,
+          "palette": false,
+          "tags": false,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.36
+      },
+      "tuned": {
+        "id": "eval-002",
+        "raw": "{\"runFill\": \"#4A4A48\"}",
+        "error": null,
+        "patch": {
+          "runFill": "#4A4A48"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 3.88
+      }
+    },
+    {
+      "id": "eval-003",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "Sym_P102"
+      },
+      "instruction": "When this thing trips I want it to scream at the operator.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "faultColor": "#E0301E"
+      },
+      "base": {
+        "id": "eval-003",
+        "raw": "{\n  \"style\": {\n    \"color\": {\n      \"value\": \"red\",\n      \"when\": {\n        \"tag\": \"P102.Status\",\n        \"value\": \"Tripped\"\n      }\n    },\n    \"opacity\": {\n      \"value\": 1.0,\n      \"when\": {\n        \"tag\": \"P102.Status\",\n        \"value\": \"Tripped\"\n      }\n    }\n  },\n  \"animation\": {\n    \"blink\": {\n      \"enabled\": true,\n      \"when\": {\n        \"tag\": \"P102.Status\",\n        \"value\": \"Tripped\"\n      }\n    }\n  }\n}",
+        "error": null,
+        "patch": {
+          "style": {
+            "color": {
+              "value": "red",
+              "when": {
+                "tag": "P102.Status",
+                "value": "Tripped"
+              }
+            },
+            "opacity": {
+              "value": 1.0,
+              "when": {
+                "tag": "P102.Status",
+                "value": "Tripped"
+              }
+            }
+          },
+          "animation": {
+            "blink": {
+              "enabled": true,
+              "when": {
+                "tag": "P102.Status",
+                "value": "Tripped"
+              }
+            }
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.36
+      },
+      "tuned": {
+        "id": "eval-003",
+        "raw": "{\"faultColor\": \"#E0301E\"}",
+        "error": null,
+        "patch": {
+          "faultColor": "#E0301E"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 3.93
+      }
+    },
+    {
+      "id": "eval-004",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "FeedPump-P-102"
+      },
+      "instruction": "Operators need to see how fast it's spinning.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "showSpeed": true
+      },
+      "base": {
+        "id": "eval-004",
+        "raw": "{\n  \"label\": \"FeedPump-P-102\",\n  \"description\": \"Feed Pump P-102\",\n  \"properties\": {\n    \"speed\": {\n      \"value\": 0,\n      \"tag\": \"P-102.SPEED\",\n      \"units\": \"RPM\",\n      \"visible\": true\n    }\n  }\n}",
+        "error": null,
+        "patch": {
+          "label": "FeedPump-P-102",
+          "description": "Feed Pump P-102",
+          "properties": {
+            "speed": {
+              "value": 0,
+              "tag": "P-102.SPEED",
+              "units": "RPM",
+              "visible": true
+            }
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.59
+      },
+      "tuned": {
+        "id": "eval-004",
+        "raw": "{\"showSpeed\": true}",
+        "error": null,
+        "patch": {
+          "showSpeed": true
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 2.66
+      }
+    },
+    {
+      "id": "eval-005",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "Sym_P103"
+      },
+      "instruction": "Swap the run caption to 'RUNNING' and tint it green.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "runLabel": "RUNNING",
+        "runFill": "#4A4A48"
+      },
+      "base": {
+        "id": "eval-005",
+        "raw": "{\n  \"props\": {\n    \"caption\": \"RUNNING\",\n    \"captionColor\": \"#00FF00\"\n  }\n}",
+        "error": null,
+        "patch": {
+          "props": {
+            "caption": "RUNNING",
+            "captionColor": "#00FF00"
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": false,
+          "palette": false,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.08
+      },
+      "tuned": {
+        "id": "eval-005",
+        "raw": "{\"runLabel\": \"RUNNING\", \"runFill\": \"#4A4848\"}",
+        "error": null,
+        "patch": {
+          "runLabel": "RUNNING",
+          "runFill": "#4A4848"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": false,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.5,
+        "seconds": 6.9
+      }
+    },
+    {
+      "id": "eval-006",
+      "component": {
+        "type": "ia.symbol.pump",
+        "name": "Sym_P102"
+      },
+      "instruction": "Everything on: rpm percent, current draw, and a green running state.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "runFill": "#4A4A48",
+        "showSpeed": true,
+        "showAmps": true
+      },
+      "base": {
+        "id": "eval-006",
+        "raw": "{\n  \"props\": {\n    \"rpmPercent\": true,\n    \"currentDraw\": true,\n    \"state\": \"running\",\n    \"stateColor\": \"green\",\n    \"showUnits\": true\n  }\n}",
+        "error": null,
+        "patch": {
+          "props": {
+            "rpmPercent": true,
+            "currentDraw": true,
+            "state": "running",
+            "stateColor": "green",
+            "showUnits": true
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": false,
+          "palette": false,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.04
+      },
+      "tuned": {
+        "id": "eval-006",
+        "raw": "{\"showSpeed\": true, \"showAmps\": true, \"runFill\": \"#4A4A48\"}",
+        "error": null,
+        "patch": {
+          "showSpeed": true,
+          "showAmps": true,
+          "runFill": "#4A4A48"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 5.25
+      }
+    },
+    {
+      "id": "eval-007",
+      "component": {
+        "type": "ia.display.cylindricaltank",
+        "name": "Vessel T-102"
+      },
+      "instruction": "This gauge isn't connected to anything, fix the binding.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "tag": "[default]Station01/T-102/LevelPct"
+      },
+      "base": {
+        "id": "eval-007",
+        "raw": "{\n  \"value\": \"T-102.LVL\"\n}",
+        "error": null,
+        "patch": {
+          "value": "T-102.LVL"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.09
+      },
+      "tuned": {
+        "id": "eval-007",
+        "raw": "{\"tag\": \"[default]Station01/T-102/LevelPct\"}",
+        "error": null,
+        "patch": {
+          "tag": "[default]Station01/T-102/LevelPct"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 3.55
+      }
+    },
+    {
+      "id": "eval-008",
+      "component": {
+        "type": "ia.display.cylindricaltank",
+        "name": "Vessel T-102"
+      },
+      "instruction": "Operators should see where the overflow and dry-run setpoints sit.",
+      "rules": [
+        "Plant HMI standard",
+        "Bind only to existing tags"
+      ],
+      "reference": {
+        "showLimits": true,
+        "hi": "[default]Station01/T-102/LevelHi",
+        "lo": "[default]Station01/T-102/LevelLo"
+      },
+      "base": {
+        "id": "eval-008",
+        "raw": "{\n  \"showSetpoints\": true,\n  \"setpointTags\": [\n    \"T-102.OverflowSP\",\n    \"T-102.DryRunSP\"\n  ]\n}",
+        "error": null,
+        "patch": {
+          "showSetpoints": true,
+          "setpointTags": [
+            "T-102.OverflowSP",
+            "T-102.DryRunSP"
+          ]
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.79
+      },
+      "tuned": {
+        "id": "eval-008",
+        "raw": "{\"hi\": \"[default]Station01/T-102/LevelHi\", \"lo\": \"[default]Station01/T-102/LevelLo\"}",
+        "error": null,
+        "patch": {
+          "hi": "[default]Station01/T-102/LevelHi",
+          "lo": "[default]Station01/T-102/LevelLo"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": false,
+        "field_recall": 0.6666666666666666,
+        "seconds": 5.74
+      }
+    },
+    {
+      "id": "eval-009",
+      "component": {
+        "type": "ia.display.cylindricaltank",
+        "name": "T101_Gauge"
+      },
+      "instruction": "Connect it to live level and mark the high and low trips.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "tag": "[default]Station01/T-101/LevelPct",
+        "showLimits": true,
+        "hi": "[default]Station01/T-101/LevelHi",
+        "lo": "[default]Station01/T-101/LevelLo"
+      },
+      "base": {
+        "id": "eval-009",
+        "raw": "{\n  \"value\": \"tag:Station01.T101.Level\",\n  \"highLimit\": \"tag:Station01.T101.LevelHighTrip\",\n  \"lowLimit\": \"tag:Station01.T101.LevelLowTrip\",\n  \"units\": \"tag:Station01.T101.LevelUnits\"\n}",
+        "error": null,
+        "patch": {
+          "value": "tag:Station01.T101.Level",
+          "highLimit": "tag:Station01.T101.LevelHighTrip",
+          "lowLimit": "tag:Station01.T101.LevelLowTrip",
+          "units": "tag:Station01.T101.LevelUnits"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.48
+      },
+      "tuned": {
+        "id": "eval-009",
+        "raw": "{\"tag\": \"[default]Station01/T-101/LevelPct\", \"hi\": \"[default]Station01/T-101/LevelHi\", \"lo\": \"[default]Station01/T-101/LevelLo\", \"hiColor\": \"#E0301E\", \"loColor\": \"#F5A623\"}",
+        "error": null,
+        "patch": {
+          "tag": "[default]Station01/T-101/LevelPct",
+          "hi": "[default]Station01/T-101/LevelHi",
+          "lo": "[default]Station01/T-101/LevelLo",
+          "hiColor": "#E0301E",
+          "loColor": "#F5A623"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.75,
+        "seconds": 5.09
+      }
+    },
+    {
+      "id": "eval-010",
+      "component": {
+        "type": "ia.display.alarmstatustable",
+        "name": "AlmSummary"
+      },
+      "instruction": "Too noisy, I only care about critical priority or worse.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "minPriority": "Critical"
+      },
+      "base": {
+        "id": "eval-010",
+        "raw": "{\n  \"filter\": \"priority >= 1\"\n}",
+        "error": null,
+        "patch": {
+          "filter": "priority >= 1"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 5.8
+      },
+      "tuned": {
+        "id": "eval-010",
+        "raw": "{\"minPriority\": \"Critical\"}",
+        "error": null,
+        "patch": {
+          "minPriority": "Critical"
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 4.2
+      }
+    },
+    {
+      "id": "eval-011",
+      "component": {
+        "type": "ia.display.alarmstatustable",
+        "name": "ActiveAlarms"
+      },
+      "instruction": "Just medium and up, plus a bulk acknowledge.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "minPriority": "Medium",
+        "showAckAll": true
+      },
+      "base": {
+        "id": "eval-011",
+        "raw": "```json\n{\n  \"severityFilter\": [\n    \"Medium\",\n    \"High\",\n    \"Critical\"\n  ],\n  \"allowBulkAcknowledge\": true\n}\n```",
+        "error": null,
+        "patch": {
+          "severityFilter": [
+            "Medium",
+            "High",
+            "Critical"
+          ],
+          "allowBulkAcknowledge": true
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.87
+      },
+      "tuned": {
+        "id": "eval-011",
+        "raw": "{\"minPriority\": \"Medium\", \"showAckAll\": true}",
+        "error": null,
+        "patch": {
+          "minPriority": "Medium",
+          "showAckAll": true
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 3.4
+      }
+    },
+    {
+      "id": "eval-012",
+      "component": {
+        "type": "ia.chart.timeseries",
+        "name": "HistoryPlot"
+      },
+      "instruction": "Zoom out so I can see the whole 12 hours.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "rangeMinutes": 720
+      },
+      "base": {
+        "id": "eval-012",
+        "raw": "{\n  \"timeRange\": \"12h\"\n}",
+        "error": null,
+        "patch": {
+          "timeRange": "12h"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.7
+      },
+      "tuned": {
+        "id": "eval-012",
+        "raw": "{\"rangeMinutes\": 720}",
+        "error": null,
+        "patch": {
+          "rangeMinutes": 720
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 6.47
+      }
+    },
+    {
+      "id": "eval-013",
+      "component": {
+        "type": "ia.chart.timeseries",
+        "name": "Overview Trend"
+      },
+      "instruction": "Overlay P-101's motor current with its own scale.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "secondAxis": {
+          "tag": "[default]Station01/P-101/Amps",
+          "units": "A"
+        }
+      },
+      "base": {
+        "id": "eval-013",
+        "raw": "```json\n{\n  \"series\": [\n    {\n      \"tag\": \"P-101.MotorCurrent\",\n      \"scale\": \"right\"\n    }\n  ]\n}\n```",
+        "error": null,
+        "patch": {
+          "series": [
+            {
+              "tag": "P-101.MotorCurrent",
+              "scale": "right"
+            }
+          ]
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.78
+      },
+      "tuned": {
+        "id": "eval-013",
+        "raw": "{\"secondTag\": \"[default]Station01/P-101/RunAmps\", \"secondUnits\": \"A\"}",
+        "error": null,
+        "patch": {
+          "secondTag": "[default]Station01/P-101/RunAmps",
+          "secondUnits": "A"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 3.35
+      }
+    },
+    {
+      "id": "eval-014",
+      "component": {
+        "type": "ia.display.label",
+        "name": "P-103 Amps Readout"
+      },
+      "instruction": "Nobody knows what this number means, clarify it.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "units": "A"
+      },
+      "base": {
+        "id": "eval-014",
+        "raw": "{\n  \"text\": \"P-103 Motor Current (A)\",\n  \"font\": {\n    \"size\": 14\n  }\n}",
+        "error": null,
+        "patch": {
+          "text": "P-103 Motor Current (A)",
+          "font": {
+            "size": 14
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.71
+      },
+      "tuned": {
+        "id": "eval-014",
+        "raw": "{\"units\": \"A\", \"showUnits\": true}",
+        "error": null,
+        "patch": {
+          "units": "A",
+          "showUnits": true
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 1.0,
+        "seconds": 2.73
+      }
+    },
+    {
+      "id": "eval-015",
+      "component": {
+        "type": "ia.display.label",
+        "name": "P-102 Amps Readout"
+      },
+      "instruction": "Give me an amber heads-up once it passes 30.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "units": "A",
+        "warnAbove": {
+          "value": 30,
+          "units": "A",
+          "color": "#F5A623"
+        }
+      },
+      "base": {
+        "id": "eval-015",
+        "raw": "{\n  \"text\": \"P-102 Amps: {{value}} A\",\n  \"style\": {\n    \"color\": \"amber\",\n    \"fontWeight\": \"bold\"\n  },\n  \"visible\": \"{{value > 30}}\"\n}",
+        "error": null,
+        "patch": {
+          "text": "P-102 Amps: {{value}} A",
+          "style": {
+            "color": "amber",
+            "fontWeight": "bold"
+          },
+          "visible": "{{value > 30}}"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": false,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.46
+      },
+      "tuned": {
+        "id": "eval-015",
+        "raw": "{\"units\": \"A\", \"warnAbove\": {\"value\": 30, \"units\": \"A\", \"color\": \"#F5A623\"}}",
+        "error": null,
+        "patch": {
+          "units": "A",
+          "warnAbove": {
+            "value": 30,
+            "units": "A",
+            "color": "#F5A623"
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 2.7
+      }
+    },
+    {
+      "id": "eval-016",
+      "component": {
+        "type": "ia.display.label",
+        "name": "T-102 LevelPct Readout"
+      },
+      "instruction": "Visualize it with a little fill bar too.",
+      "rules": [
+        "House ISA-101 rules apply"
+      ],
+      "reference": {
+        "units": "%",
+        "showBar": true
+      },
+      "base": {
+        "id": "eval-016",
+        "raw": "{\n  \"style\": {\n    \"display\": \"flex\",\n    \"flexDirection\": \"column\",\n    \"alignItems\": \"center\",\n    \"justifyContent\": \"center\",\n    \"gap\": \"4px\"\n  },\n  \"children\": [\n    {\n      \"type\": \"ia.display.label\",\n      \"name\": \"T-102 LevelPct Readout\",\n      \"props\": {\n        \"text\": \"={{tag('T-102.LevelPct').value}}%\",\n        \"style\": {\n          \"fontFamily\": \"monospace\",\n          \"fontSize\": \"16px\",\n          \"color\": \"#000000\",\n          \"textAlign\": \"center\"\n        }\n      }\n    },\n    {\n      \"type\": \"ia.display.progressbar\",\n      \"name\": \"T-102 LevelPct Bar\",\n      \"props\": {\n        \"value\": \"={{tag('T-102.LevelPct').value}}\",\n        \"min\": 0,\n        \"max\": 100,\n        \"style\": {\n          \"width\": \"100px\",\n          \"height\": \"10px\",\n          \"border\": \"1px solid #000000\",\n          \"borderRadius\": \"2px\"\n        }\n      }\n    }\n  ]\n}",
+        "error": null,
+        "patch": {
+          "style": {
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "gap": "4px"
+          },
+          "children": [
+            {
+              "type": "ia.display.label",
+              "name": "T-102 LevelPct Readout",
+              "props": {
+                "text": "={{tag('T-102.LevelPct').value}}%",
+                "style": {
+                  "fontFamily": "monospace",
+                  "fontSize": "16px",
+                  "color": "#000000",
+                  "textAlign": "center"
+                }
+              }
+            },
+            {
+              "type": "ia.display.progressbar",
+              "name": "T-102 LevelPct Bar",
+              "props": {
+                "value": "={{tag('T-102.LevelPct').value}}",
+                "min": 0,
+                "max": 100,
+                "style": {
+                  "width": "100px",
+                  "height": "10px",
+                  "border": "1px solid #000000",
+                  "borderRadius": "2px"
+                }
+              }
+            }
+          ]
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": false,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 3.45
+      },
+      "tuned": {
+        "id": "eval-016",
+        "raw": "{\"showBar\": true}",
+        "error": null,
+        "patch": {
+          "showBar": true
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.5,
+        "seconds": 3.04
+      }
+    },
+    {
+      "id": "eval-017",
+      "component": {
+        "type": "ia.symbol.valve",
+        "name": "V202_Symbol"
+      },
+      "instruction": "How far open is it? Show that.",
+      "rules": [
+        "Plant HMI standard",
+        "Bind only to existing tags"
+      ],
+      "reference": {
+        "showOpenPct": true
+      },
+      "base": {
+        "id": "eval-017",
+        "raw": "{\n  \"props\": {\n    \"value\": \"V202.Opening\"\n  }\n}",
+        "error": null,
+        "patch": {
+          "props": {
+            "value": "V202.Opening"
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": false,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.65
+      },
+      "tuned": {
+        "id": "eval-017",
+        "raw": "{\"showOpenPct\": true}",
+        "error": null,
+        "patch": {
+          "showOpenPct": true
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 4.8
+      }
+    },
+    {
+      "id": "eval-018",
+      "component": {
+        "type": "ia.symbol.valve",
+        "name": "Ctrl Valve V-201"
+      },
+      "instruction": "Open should read as green, and add its position.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "showOpenPct": true
+      },
+      "base": {
+        "id": "eval-018",
+        "raw": "{\n  \"color\": \"green\",\n  \"label\": \"Open\"\n}",
+        "error": null,
+        "patch": {
+          "color": "green",
+          "label": "Open"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": false,
+          "palette": false,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 1.72
+      },
+      "tuned": {
+        "id": "eval-018",
+        "raw": "{\"openFill\": \"#4A4A48\", \"showOpenPct\": true}",
+        "error": null,
+        "patch": {
+          "openFill": "#4A4A48",
+          "showOpenPct": true
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 1.0,
+        "seconds": 5.23
+      }
+    },
+    {
+      "id": "eval-019",
+      "component": {
+        "type": "ia.symbol.sensor",
+        "name": "Meter FT301"
+      },
+      "instruction": "I want the running total of what's gone through.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "showTotal": true
+      },
+      "base": {
+        "id": "eval-019",
+        "raw": "{\n  \"tag\": \"FT301.Total\",\n  \"format\": \"0.00\",\n  \"unit\": \"gal\"\n}",
+        "error": null,
+        "patch": {
+          "tag": "FT301.Total",
+          "format": "0.00",
+          "unit": "gal"
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": false,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.06
+      },
+      "tuned": {
+        "id": "eval-019",
+        "raw": "{\"showTotal\": true}",
+        "error": null,
+        "patch": {
+          "showTotal": true
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 4.96
+      }
+    },
+    {
+      "id": "eval-020",
+      "component": {
+        "type": "ia.symbol.sensor",
+        "name": "Meter FT301"
+      },
+      "instruction": "Heads-up if flow sags under 25.",
+      "rules": [
+        "Station01 display conventions",
+        "Always show engineering units"
+      ],
+      "reference": {
+        "warnBelow": {
+          "value": 25,
+          "units": "GPM",
+          "color": "#F5A623"
+        }
+      },
+      "base": {
+        "id": "eval-020",
+        "raw": "```json\n{\n  \"props\": {\n    \"alarm\": {\n      \"low\": 25,\n      \"lowSeverity\": \"warning\",\n      \"lowMessage\": \"Flow sags under 25\"\n    },\n    \"display\": {\n      \"showUnits\": true\n    }\n  }\n}\n```",
+        "error": null,
+        "patch": {
+          "props": {
+            "alarm": {
+              "low": 25,
+              "lowSeverity": "warning",
+              "lowMessage": "Flow sags under 25"
+            },
+            "display": {
+              "showUnits": true
+            }
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": false,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": false
+        },
+        "exact": false,
+        "field_recall": 0.0,
+        "seconds": 2.25
+      },
+      "tuned": {
+        "id": "eval-020",
+        "raw": "{\"warnBelow\": {\"value\": 25, \"units\": \"GPM\", \"color\": \"#F5A623\"}}",
+        "error": null,
+        "patch": {
+          "warnBelow": {
+            "value": 25,
+            "units": "GPM",
+            "color": "#F5A623"
+          }
+        },
+        "checks": {
+          "json": true,
+          "keys": true,
+          "no_green": true,
+          "palette": true,
+          "tags": true,
+          "units": true,
+          "pass": true
+        },
+        "exact": true,
+        "field_recall": 1.0,
+        "seconds": 4.0
+      }
+    }
+  ]
+}

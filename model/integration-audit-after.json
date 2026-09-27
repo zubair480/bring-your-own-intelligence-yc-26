@@ -1,0 +1,190 @@
+{
+  "audited_at_utc": "2026-09-27T16:32:05.917634-07:00",
+  "public_url": "https://faceplate-demo.pages.dev",
+  "latest_checkpoint": {
+    "checkpoint": "river://a88cc64d-4dd0-4936-88cb-53e81bad4b9b/sampler_weights/faceplate-20260927T232807Z-inf",
+    "training_checkpoint": "river://a88cc64d-4dd0-4936-88cb-53e81bad4b9b/weights/faceplate-20260927T232807Z-train",
+    "base_model": "Qwen/Qwen3.8-27B-FP8",
+    "rank": 16,
+    "lr": 0.0002,
+    "batch_size": 8,
+    "steps": 15,
+    "losses": [
+      1.5415489673614502,
+      1.1187467575073242,
+      0.5576208829879761,
+      0.6408171057701111,
+      0.291286826133728,
+      0.17352020740509033,
+      0.4086255729198456,
+      0.24571861326694489,
+      0.2382061630487442,
+      0.07163460552692413,
+      0.08936889469623566,
+      0.05462164804339409,
+      0.09176908433437347,
+      0.050371624529361725,
+      0.028584185987710953
+    ],
+    "loss_first": 1.5415489673614502,
+    "loss_last": 0.028584185987710953,
+    "train_examples": 120,
+    "run_id": "faceplate-20260927T232807Z",
+    "resumed_from": null,
+    "created_at": "2026-09-27T16:30:33.647933-07:00",
+    "train_seconds": 146.3
+  },
+  "tests": [
+    {
+      "name": "green",
+      "started_at_utc": "2026-09-27T16:32:06.02649-07:00",
+      "request": {
+        "component_id": "audit-pump-p101",
+        "component_type": "ia.symbol.pump",
+        "component_path": "root/Pump_P101",
+        "component_name": "Pump_P101",
+        "instruction": "Make the running state green and show speed.",
+        "current_props": {},
+        "model_pref": "tuned"
+      },
+      "error": "HTTPError: HTTP Error 403: Forbidden",
+      "elapsed_s": 0.034
+    },
+    {
+      "name": "speed_amps",
+      "started_at_utc": "2026-09-27T16:32:06.061699-07:00",
+      "request": {
+        "component_id": "audit-pump-p101",
+        "component_type": "ia.symbol.pump",
+        "component_path": "root/Pump_P101",
+        "component_name": "Pump_P101",
+        "instruction": "Show pump speed and motor current on the pump faceplate.",
+        "current_props": {},
+        "model_pref": "tuned"
+      },
+      "error": "HTTPError: HTTP Error 403: Forbidden",
+      "elapsed_s": 0.035
+    }
+  ],
+  "acceptance_performed": false,
+  "health_error": "HTTPError: HTTP Error 403: Forbidden",
+  "finished_at_utc": "2026-09-27T16:32:06.097923-07:00",
+  "powershell_retry": [
+    {
+      "elapsed_s": 12.7885183,
+      "request": {
+        "component_name": "Pump_P101",
+        "model_pref": "tuned",
+        "component_path": "root/Pump_P101",
+        "component_type": "ia.symbol.pump",
+        "instruction": "Make the running state green and show speed.",
+        "component_id": "audit-pump-p101",
+        "current_props": {}
+      },
+      "name": "green",
+      "response": {
+        "kind": "patch",
+        "patch": {
+          "showSpeed": true
+        },
+        "answer": "",
+        "rationale": "Per HMI Style Guide (ISA-101) (hmi/style-guide): running equipment uses a dark gray #4A4A48 fill with a white label, never green, so Pump_P101 gets showSpeed on.",
+        "rules_cited": [
+          {
+            "slug": "plant/equipment/p-101",
+            "title": "P-101",
+            "snippet": "Running = dark gray #4A4A48 fill with a white \"RUN\" label. Fault = red #E0301E. Never green ([[hmi/style-guide]])."
+          },
+          {
+            "slug": "decisions/log",
+            "title": "Decision Log",
+            "snippet": "2026-09-27 — Zubair: pumps show running state as dark gray fill, never green (ISA-101). Alarms panel lives on the left."
+          },
+          {
+            "slug": "plant/equipment/p-102",
+            "title": "P-102",
+            "snippet": "Lag pump. No open issues. Its faceplate was the first one rebuilt to the standard with Faceplate on 2026-09-27 ([[decisions/log]])."
+          }
+        ],
+        "model": "qwen-lora",
+        "latency_ms": 12601,
+        "trace": [
+          {
+            "step": "GBrain search",
+            "target": "gbrain.io/mcp · search",
+            "detail": "3 pages: plant/equipment/p-101, decisions/log, plant/equipment/p-102",
+            "ms": 815
+          },
+          {
+            "step": "LLM",
+            "target": "River · Qwen/Qwen3.8-27B-FP8+faceplate-lora",
+            "detail": "patch",
+            "ms": 11783
+          }
+        ]
+      },
+      "started_at_utc": "2026-09-27T23:32:20.8954257Z"
+    },
+    {
+      "elapsed_s": 5.5471263,
+      "request": {
+        "component_name": "Pump_P101",
+        "model_pref": "tuned",
+        "component_path": "root/Pump_P101",
+        "component_type": "ia.symbol.pump",
+        "instruction": "Show pump speed and motor current on the pump faceplate.",
+        "component_id": "audit-pump-p101",
+        "current_props": {}
+      },
+      "name": "speed_amps",
+      "response": {
+        "kind": "patch",
+        "patch": {
+          "showSpeed": true,
+          "showAmps": true
+        },
+        "answer": "",
+        "rationale": "Per HMI Style Guide (ISA-101) (hmi/style-guide): running equipment uses a dark gray #4A4A48 fill with a white label, never green, so Pump_P101 gets showSpeed on, showAmps on.",
+        "rules_cited": [
+          {
+            "slug": "plant/equipment/p-103",
+            "title": "P-103",
+            "snippet": "Owner [[people/dev-patel]] knows the full history. Operators should watch `Amps` and switch to [[plant/equipment/p-101]] using [[sops/pump-changeover]] if it climbs."
+          },
+          {
+            "slug": "plant/equipment/p-102",
+            "title": "P-102",
+            "snippet": "Lag pump. No open issues. Its faceplate was the first one rebuilt to the standard with Faceplate on 2026-09-27 ([[decisions/log]])."
+          },
+          {
+            "slug": "people/dev-patel",
+            "title": "Dev Patel",
+            "snippet": "Owns P-101, P-102 and P-103: [[plant/equipment/p-101]], [[plant/equipment/p-102]], [[plant/equipment/p-103]]. He owns the pump logic, the `[default]Station01/P-10x/...` tags and the pump faceplates' data bindings."
+          }
+        ],
+        "model": "qwen-lora",
+        "latency_ms": 5460,
+        "trace": [
+          {
+            "step": "GBrain search",
+            "target": "gbrain.io/mcp · search",
+            "detail": "3 pages: plant/equipment/p-103, plant/equipment/p-102, people/dev-patel",
+            "ms": 438
+          },
+          {
+            "step": "LLM",
+            "target": "River · Qwen/Qwen3.8-27B-FP8+faceplate-lora",
+            "detail": "patch",
+            "ms": 5021
+          }
+        ]
+      },
+      "started_at_utc": "2026-09-27T23:32:33.7068046Z"
+    }
+  ],
+  "health_powershell": {
+    "ok": true,
+    "gbrain": true,
+    "model": "qwen-lora"
+  }
+}

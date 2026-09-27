@@ -1,0 +1,66 @@
+{
+  "audited_at_utc": "2026-09-27T23:28:28.3353297Z",
+  "stage": "before trained checkpoint and backend interpreter restart",
+  "independent_audit": true,
+  "writes_performed": "Only this audit artifact under model; no accept call, model changes, server restart, or training performed by audit agent.",
+  "local_health": {"ok": true, "gbrain": true, "model": "qwen-base"},
+  "public_health": {"ok": true, "gbrain": true, "model": "qwen-base"},
+  "backend": {
+    "address": "127.0.0.1:8000",
+    "pid": 17500,
+    "python": "C:\\Python313\\python.exe",
+    "river_client_available_in_backend_interpreter": false
+  },
+  "latest_checkpoint_file_present": false,
+  "edit_request": {
+    "component_id": "audit-pump-p101",
+    "component_type": "ia.symbol.pump",
+    "component_path": "root/Pump_P101",
+    "component_name": "Pump_P101",
+    "instruction": "Show pump speed and motor current on the pump faceplate.",
+    "current_props": {},
+    "model_pref": "tuned"
+  },
+  "edit_response": {
+    "kind": "patch",
+    "patch": {"showSpeed": true, "showAmps": true},
+    "answer": "",
+    "rationale": "Matches the precedent set on P-102's faceplate on 2026-09-27 (showSpeed on, showAmps on) for the same request [decisions/log], using the SpeedPct and Amps tags standard for P-101 [plant/equipment/p-101].",
+    "rules_cited": [
+      {"slug": "plant/equipment/p-103", "title": "P-103", "snippet": "Owner [[people/dev-patel]] knows the full history. Operators should watch `Amps` and switch to [[plant/equipment/p-101]] using [[sops/pump-changeover]] if it climbs."},
+      {"slug": "plant/equipment/p-102", "title": "P-102", "snippet": "Lag pump. No open issues. Its faceplate was the first one rebuilt to the standard with Faceplate on 2026-09-27 ([[decisions/log]])."},
+      {"slug": "people/dev-patel", "title": "Dev Patel", "snippet": "Owns P-101, P-102 and P-103: [[plant/equipment/p-101]], [[plant/equipment/p-102]], [[plant/equipment/p-103]]. He owns the pump logic, the `[default]Station01/P-10x/...` tags and the pump faceplates' data bindings."},
+      {"slug": "decisions/log", "title": "decisions/log", "snippet": "Cited by GBrain think."},
+      {"slug": "plant/equipment/p-101", "title": "plant/equipment/p-101", "snippet": "Cited by GBrain think."}
+    ],
+    "model": "gbrain-think",
+    "latency_ms": 5817
+  },
+  "gbrain_read_evidence": {
+    "endpoint": "GET /api/decisions?limit=2",
+    "source": "gbrain",
+    "most_recent_decision": {"ts": "2026-09-27 16:26", "author": "Zubair", "component": "T-102 (T102)", "instruction": "Show HI and LO limit marks", "patch_summary": "showLimits on"}
+  },
+  "findings": [
+    "Live edit response came from GBrain think fallback; trained River integration was not operational at audit time.",
+    "Health model readiness checks only API-key configuration and import of edit_component; river_client is imported lazily later and is absent in the backend interpreter.",
+    "Current source correctly derives qwen-base versus qwen-lora from actual edit_component output label; earlier source behavior is not assumed.",
+    "GBrain retrieval and existing decision readback are verified. Acceptance write code exists but this audit intentionally did not create a decision.",
+    "Ignition screen is simulated in React; UI says simulated. Accept merges browser component props and records the decision, without a live Gateway write in this app.",
+    "QM appears in README and seeded GBrain context; no executable QM integration was found in server or web code.",
+    "Accepted examples are saved to server/data/pairs.jsonl, but next_train_in is only a counter. No automatic training trigger is implemented in the accept handler.",
+    "Gray pump output alone is not proof of training, because server validation can replace green with the configured gray. Raw checkpoint output must be shown separately."
+  ],
+  "source_references": {
+    "river_ready": "server/app.py:583",
+    "tuned_available": "server/app.py:587",
+    "river_path_and_fallback": "server/app.py:850",
+    "green_guardrail": "server/app.py:432",
+    "gbrain_retrieval": "server/app.py:465",
+    "gbrain_decision_write": "server/app.py:939",
+    "accept_training_pair_only": "server/app.py:956",
+    "simulated_data": "web/src/App.tsx:7",
+    "browser_props_accept": "web/src/App.tsx:224",
+    "qm_seeded_context_only": "server/seed_gbrain.py:235"
+  }
+}

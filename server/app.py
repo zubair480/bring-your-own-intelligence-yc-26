@@ -3,13 +3,15 @@
 Run from the repo root:
     python -m uvicorn server.app:app --port 8000
 
-Endpoints: GET /api/health, POST /api/edit, POST /api/accept, GET /api/decisions.
+Endpoints: GET /api/health, POST /api/edit, POST /api/accept, GET /api/decisions,
+GET /api/stats, POST /api/ack.
 See docs/api.md for the contract. Never logs the GBrain token.
 """
 from __future__ import annotations
 
 import concurrent.futures
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -494,6 +496,14 @@ class EditReq(BaseModel):
     component_name: str = ""
     instruction: str
     current_props: Optional[dict] = None
+    model_pref: Optional[str] = None  # "base" | "tuned"; None = model default
+
+
+class AckReq(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    tag: str
+    author: str = "operator"
+    message: Optional[str] = None
 
 
 class AcceptReq(BaseModel):
@@ -569,6 +579,31 @@ def allowed_keys(fam: str) -> list[str]:
 
 def river_key_set() -> bool:
     return bool(os.environ.get("RIVER_API_KEY") or load_env().get("RIVER_API_KEY"))
+
+
+def river_sdk() -> bool:
+    try:
+        return importlib.util.find_spec("river_client") is not None
+    except Exception:
+        return False
+
+
+def river_reason() -> str:
+    if not river_key_set():
+        return "Needs River key — add RIVER_API_KEY to .env"
+    if not river_sdk():
+        return "Needs River SDK — river_client is not installed on the backend"
+    if get_model_fn() is None:
+        return "model/edit_model.py failed to import"
+    return ""
+
+
+def river_ready() -> bool:
+    return (not FORCE_RULES) and river_key_set() and river_sdk() and get_model_fn() is not None
+
+
+def tuned_available() -> bool:
+    return (REPO_ROOT / "model" / "runs" / "latest.json").exists()
 
 
 def is_question(text: str) -> bool:
@@ -718,7 +753,7 @@ def _think_raw(question: str) -> dict:
         raise
 
 
-def call_think(question: str) -> tuple[Optional[dict], str, list[str]]:
+def call_think(question: str, meta: Optional[dict] = None) -> tuple[Optional[dict], str, list[str]]:
     """Return (decision obj or None, answer text, cited slugs). Raises on failure/timeout.
 
     think returns one text block holding JSON: {question, answer, citations:[{page_slug}], modelUsed, ...}.
@@ -729,6 +764,8 @@ def call_think(question: str) -> tuple[Optional[dict], str, list[str]]:
     slugs: list[str] = []
     obj = None
     if isinstance(outer, dict):
+        if meta is not None:
+            meta["model"] = outer.get("modelUsed") or outer.get("model") or ""
         raw_answer = outer.get("answer")
         for cit in outer.get("citations") or []:
             s = cit.get("page_slug") if isinstance(cit, dict) else None
@@ -789,8 +826,8 @@ def health():
     gb = gbrain_ok()
     if FORCE_RULES:
         model = "rules"
-    elif river_key_set() and get_model_fn():
-        model = "qwen-lora"
+    elif river_ready():
+        model = "qwen-lora" if tuned_available() else "qwen-base"
     elif gb:
         model = "gbrain-think"
     else:
@@ -798,7 +835,7 @@ def health():
     return {"ok": True, "gbrain": gb, "model": model}
 
 
-def _respond(t0, req, props, kind, patch, answer, rationale, cited, model_used):
+def _respond(t0, req, props, kind, patch, answer, rationale, cited, model_used, trace=None):
     _last_edit[req.component_id] = {
         "component_type": req.component_type, "component_path": req.component_path,
         "current_props": props, "rules": [c.get("snippet", "") for c in cited], "model": model_used,
@@ -811,6 +848,7 @@ def _respond(t0, req, props, kind, patch, answer, rationale, cited, model_used):
         "rules_cited": cited,
         "model": model_used,
         "latency_ms": int((time.perf_counter() - t0) * 1000),
+        "trace": trace or [],
     }
 
 
@@ -822,38 +860,79 @@ def edit(req: EditReq):
     name = req.component_name or req.component_id
     question = is_question(req.instruction)
 
-    cite_future = _pool.submit(cite_rules, req.instruction, req.component_name)
+    trace: list[dict] = []
+    cite_meta: dict[str, Any] = {}
+
+    def timed_cite():
+        ts = time.perf_counter()
+        try:
+            return cite_rules(req.instruction, req.component_name)
+        finally:
+            cite_meta["ms"] = int((time.perf_counter() - ts) * 1000)
+
+    cite_future = _pool.submit(timed_cite)
 
     def cited_now() -> tuple[list[dict], list[str]]:
         try:
-            return cite_future.result(timeout=15)
+            res = cite_future.result(timeout=15)
         except Exception:
-            return [], []
+            res = ([], [])
+        if not cite_meta.get("traced"):
+            cite_meta["traced"] = True
+            slugs = [c.get("slug") for c in res[0] if c.get("slug")]
+            trace.insert(0, {"step": "GBrain search", "target": "gbrain.io/mcp · search",
+                             "detail": (f"{len(slugs)} page{'s' if len(slugs) != 1 else ''}: " + ", ".join(slugs))
+                             if slugs else "0 pages (no match or unreachable)",
+                             "ms": cite_meta.get("ms", 0)})
+        return res
 
     # 1. River LoRA model: only when a River key is configured and this is a change request.
-    fn = get_model_fn() if (river_key_set() and not question) else None
+    fn = get_model_fn() if (river_ready() and not question) else None
     if fn is not None:
         cited, rule_texts = cited_now()
         component = {"id": req.component_id, "type": req.component_type, "path": req.component_path,
                      "name": req.component_name, "props": props}
+        pref = (req.model_pref or "").strip().lower()
+        t_llm = time.perf_counter()
+        rules_arg = rule_texts or [c["snippet"] for c in cited]
         try:
-            out = _pool.submit(fn, component, req.instruction, rule_texts or [c["snippet"] for c in cited]).result(
-                timeout=MODEL_TIMEOUT_S)
+            if pref in ("base", "tuned"):
+                use_tuned = pref == "tuned"
+                try:
+                    fut = _pool.submit(lambda: fn(component, req.instruction, rules_arg, use_tuned=use_tuned))
+                    out = fut.result(timeout=MODEL_TIMEOUT_S)
+                except TypeError:  # older edit_component without use_tuned
+                    out = _pool.submit(fn, component, req.instruction, rules_arg).result(timeout=MODEL_TIMEOUT_S)
+            else:
+                out = _pool.submit(fn, component, req.instruction, rules_arg).result(timeout=MODEL_TIMEOUT_S)
+            label = str(out.get("model") or "") if isinstance(out, dict) else ""
+            model_used = "qwen-lora" if "lora" in label.lower() else "qwen-base"
             mp = validate_patch(fam, out.get("patch") if isinstance(out, dict) else None, req.instruction)
+            trace.append({"step": "LLM", "target": f"River · {label or model_used}",
+                          "detail": "patch" if mp else "no valid patch", "ms": int((time.perf_counter() - t_llm) * 1000)})
             if mp:
                 rationale = out.get("rationale")
                 if not rationale:
                     _, keys = rules_engine(fam, req.instruction, name, req.component_id, req.component_path, props)
                     rationale = make_rationale(keys, name, mp, cited)
-                return _respond(t0, req, props, "patch", mp, "", rationale, cited, "qwen-lora")
-        except Exception:
-            pass
+                return _respond(t0, req, props, "patch", mp, "", rationale, cited, model_used, trace)
+        except Exception as e:
+            trace.append({"step": "LLM", "target": "River", "detail": f"failed: {type(e).__name__}",
+                          "ms": int((time.perf_counter() - t_llm) * 1000)})
 
     # 2. GBrain think (LLM over team memory).
     if not FORCE_RULES:
+        think_meta: dict[str, Any] = {}
+        t_think = time.perf_counter()
         try:
-            obj, prose, slugs = call_think(build_think_prompt(req, fam, props))
+            obj, prose, slugs = call_think(build_think_prompt(req, fam, props), think_meta)
+            think_ms = int((time.perf_counter() - t_think) * 1000)
             cited, _ = cited_now()
+
+            def tstep(detail: str) -> list[dict]:
+                tm = think_meta.get("model") or "LLM"
+                trace.append({"step": "LLM", "target": f"gbrain.io/mcp · think ({tm})", "detail": detail, "ms": think_ms})
+                return trace
             cited = merge_cited(cited, slugs)
             kind = str((obj or {}).get("kind") or "").lower()
             if obj is not None and (kind == "patch" or (not kind and "patch" in obj)):
@@ -861,28 +940,30 @@ def edit(req: EditReq):
                 if patch:
                     rationale = str(obj.get("rationale") or "").strip() or \
                         f"Per the team HMI standard, {name} gets {summarize(patch)}."
-                    return _respond(t0, req, props, "patch", patch, "", rationale, cited, "gbrain-think")
+                    return _respond(t0, req, props, "patch", patch, "", rationale, cited, "gbrain-think", tstep("patch"))
                 ans = str(obj.get("rationale") or "").strip()
                 ans = (ans + " " if ans else "") + no_map_answer(req, fam)
-                return _respond(t0, req, props, "answer", {}, ans, "", cited, "gbrain-think")
+                return _respond(t0, req, props, "answer", {}, ans, "", cited, "gbrain-think", tstep("answer"))
             if obj is not None and obj.get("answer"):
                 return _respond(t0, req, props, "answer", {}, clean_answer(str(obj["answer"])), "", cited,
-                                "gbrain-think")
+                                "gbrain-think", tstep("answer"))
             if prose.strip():  # think answered in prose instead of JSON
-                return _respond(t0, req, props, "answer", {}, clean_answer(prose), "", cited, "gbrain-think")
-        except Exception:
-            pass
+                return _respond(t0, req, props, "answer", {}, clean_answer(prose), "", cited, "gbrain-think", tstep("answer"))
+        except Exception as e:
+            trace.append({"step": "LLM", "target": "gbrain.io/mcp · think", "detail": f"failed: {type(e).__name__}",
+                          "ms": int((time.perf_counter() - t_think) * 1000)})
 
     # 3. Fallback: rules engine only when a keyword matched. Never a default patch.
     cited, _ = cited_now()
+    trace.append({"step": "Rules", "target": "local rules engine", "detail": "fallback", "ms": 0})
     if question:
-        return _respond(t0, req, props, "answer", {}, fallback_answer(req, fam, cited), "", cited, "rules")
+        return _respond(t0, req, props, "answer", {}, fallback_answer(req, fam, cited), "", cited, "rules", trace)
     patch, keys = rules_engine(fam, req.instruction, name, req.component_id, req.component_path, props,
                                allow_default=False)
     patch = validate_patch(fam, patch, req.instruction)
     if patch:
-        return _respond(t0, req, props, "patch", patch, "", make_rationale(keys, name, patch, cited), cited, "rules")
-    return _respond(t0, req, props, "answer", {}, no_map_answer(req, fam), "", cited, "rules")
+        return _respond(t0, req, props, "patch", patch, "", make_rationale(keys, name, patch, cited), cited, "rules", trace)
+    return _respond(t0, req, props, "answer", {}, no_map_answer(req, fam), "", cited, "rules", trace)
 
 
 # --------------------------------------------------------------------------
@@ -967,7 +1048,9 @@ def accept(req: AcceptReq):
         total = sum(1 for ln in f if ln.strip())
 
     return {"ok": True, "gbrain_logged": gbrain_logged, "logged_line": line,
-            "pairs_total": total, "next_train_in": TRAIN_EVERY - (total % TRAIN_EVERY)}
+            "pairs_total": total, "next_train_in": TRAIN_EVERY - (total % TRAIN_EVERY),
+            "gbrain_write": {"page": DECISIONS_SLUG, "line": line, "ok": gbrain_logged},
+            "pairs_file": "server/data/pairs.jsonl", "pair_index": total}
 
 
 @app.get("/api/decisions")
@@ -983,3 +1066,44 @@ def decisions(limit: int = 20):
     items = parse_decisions(md)
     items.reverse()  # newest first
     return {"decisions": items[: max(1, limit)], "source": source}
+
+
+# --------------------------------------------------------------------------
+# Stats + alarm acknowledge
+# --------------------------------------------------------------------------
+def pairs_total() -> int:
+    if not PAIRS_PATH.exists():
+        return 0
+    with open(PAIRS_PATH, encoding="utf-8") as f:
+        return sum(1 for ln in f if ln.strip())
+
+
+@app.get("/api/stats")
+def stats():
+    total = pairs_total()
+    ready = river_ready()
+    if FORCE_RULES:
+        model = "rules"
+    elif ready:
+        model = "qwen-lora" if tuned_available() else "qwen-base"
+    else:
+        model = "gbrain-think" if gbrain_ok() else "rules"
+    return {"pairs_total": total, "next_train_in": TRAIN_EVERY - (total % TRAIN_EVERY),
+            "model": model, "river_ready": ready, "river_reason": "" if ready else river_reason(),
+            "tuned_available": tuned_available()}
+
+
+@app.post("/api/ack")
+def ack(req: AckReq):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    tag = re.sub(r'[\n—"]', " ", req.tag or "").strip()[:40] or "alarm"
+    author = re.sub(r"[:\n—]", " ", req.author or "operator").strip() or "operator"
+    msg = re.sub(r"\s+", " ", req.message or "").replace('"', "'").strip()[:80]
+    what = f"{tag} ({msg})" if msg else tag
+    line = f"- {ts} — {author}: Alarm {what} acknowledged"
+    gbrain_logged = append_decision_line(line)
+    with open(LOCAL_DECISIONS_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"line": line, "gbrain": gbrain_logged}) + "\n")
+    return {"ok": True, "gbrain_logged": gbrain_logged, "logged_line": line,
+            "gbrain_write": {"page": DECISIONS_SLUG, "line": line, "ok": gbrain_logged}}

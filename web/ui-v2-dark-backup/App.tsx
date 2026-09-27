@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Screen, { BY_ID, DEFAULTS, Ico, Head } from './Hmi'
+import Screen, { BY_ID, DEFAULTS } from './Hmi'
 import type { Plant, PropsMap } from './Hmi'
 import type { Comp } from './view'
 
@@ -123,7 +123,7 @@ export default function App() {
   const [wait, setWait] = useState<{ start: number; instruction: string } | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const nextId = useRef(1)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (!wait) return
@@ -264,126 +264,102 @@ export default function App() {
     ? Object.entries(result.patch).filter(([key, v]) => !same(result.before[key], v))
     : []
 
-  const feed = (
-    <div className="card feed">
-      <Head icon="activity" title="Live activity" meta={`${reqs.length} request${reqs.length === 1 ? '' : 's'}`} />
-      <div className="feed-list">
-        {reqs.length === 0 && (
-          <div className="empty-feed">Every edit shows up here as it runs: GBrain rule search, model draft, validation, then accept and training.</div>
-        )}
-        {reqs.map((r) => (
-          <div key={r.id} className={`req${r.active ? ' active' : ''}`}>
-            <div className="req-h"><b>{r.comp.name}</b><span>{r.t}</span></div>
-            <div className="req-i">“{r.instruction}”</div>
-            <ol>
-              {r.steps.map((s) => (
-                <li key={s.key} className={s.state}>
-                  <i className="mk" />
-                  <div className="st">
-                    <div className="st-l">{s.label}</div>
-                    {s.detail ? <div className="st-d">{s.detail}</div> : null}
-                  </div>
-                  <span className="st-t">{s.t ?? ''}</span>
-                </li>
-              ))}
+  return (
+    <div className="app">
+      <header className="top">
+        <div className="brand"><i className="mark" /><span>Faceplate</span></div>
+        <div className="crumb">Station 01 <span>·</span> Pump Station Overview</div>
+        <div className="chips">
+          <span className="chip">GBrain <i className={`dot${health && !health.gbrain ? ' bad' : ''}`} />{health ? (health.gbrain ? 'connected' : 'offline') : '…'}</span>
+          <span className="chip">Model <i className={`dot${health?.model === 'down' ? ' bad' : ''}`} />{health ? model : '…'}</span>
+          <span className="chip">Ignition <i className="dot" />simulated</span>
+          <span className="chip clock">{plant.clock}</span>
+          <span className="who" title="Zubair">ZZ</span>
+        </div>
+      </header>
+
+      <aside className="feed">
+        <div className="rail-h">Live activity <span>{reqs.length}</span></div>
+        <div className="feed-list">
+          {reqs.length === 0 && (
+            <div className="empty-feed">Every edit request shows up here as it runs: GBrain rule search, model draft, validation, then the accept and training steps.</div>
+          )}
+          {reqs.map((r) => (
+            <div key={r.id} className={`req${r.active ? ' active' : ''}`}>
+              <div className="req-h"><b>{r.comp.name}</b><span>{r.t}</span></div>
+              <div className="req-i">“{r.instruction}”</div>
+              <ol>
+                {r.steps.map((s) => (
+                  <li key={s.key} className={s.state}>
+                    <i className="mk" />
+                    <div className="st">
+                      <div className="st-l">{s.label}</div>
+                      {s.detail ? <div className="st-d">{s.detail}</div> : null}
+                    </div>
+                    <span className="st-t">{s.t ?? ''}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      <Screen plant={plant} props={props} selected={sel?.id ?? null} flash={flash} onSelect={select} />
+
+      <aside className="insp">
+        <div className="rail-h">Inspector {sel ? <button className="x" onClick={() => select('')}>Esc</button> : null}</div>
+        {!sel ? (
+          <div className="empty">
+            <h2>Select any component on the screen to change it</h2>
+            <ol className="how">
+              <li><b>1</b><span>Click a pump, tank, valve, alarm table, trend or KPI.</span></li>
+              <li><b>2</b><span>Describe the change in plain words. GBrain pulls your team's HMI rules and the model drafts a props patch.</span></li>
+              <li><b>3</b><span>Accept it. The screen updates live, the decision is logged to GBrain, and a training pair is saved.</span></li>
             </ol>
           </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  const RAIL: [string, string, string | null][] = [
-    ['overview', 'Overview', null], ['alarm', 'Alarms', 'alarms'], ['trend', 'Trends', 'trend'],
-    ['brain', 'GBrain', null], ['qm', 'QM', null], ['settings', 'Settings', null],
-  ]
-  const headerNote = String(props.header?.note ?? '')
-
-  return (
-    <div className={`app${sel ? ' open' : ''}`}>
-      <nav className="rail">
-        <div className="logo" title="Faceplate"><i /></div>
-        {RAIL.map(([icon, label, target]) => (
-          <button key={icon} className={`rb${(target ? sel?.id === target : icon === 'overview' && !sel) ? ' on' : ''}`} title={label} aria-label={label}
-            onClick={() => select(target ?? '')}><Ico n={icon} size={18} /></button>
-        ))}
-      </nav>
-
-      <div className="main">
-        <section className="hero">
-          <div className="hero-top">
-            <button className={`station${sel?.id === 'header' ? ' sel' : ''}${flash === 'header' ? ' flash' : ''}`} onClick={() => select('header')}>
-              <b>Faceplate</b><span>Station 01 · Pump Station Overview</span>
-              {headerNote ? <em>{headerNote}</em> : null}
-            </button>
-            <div className="chips">
-              <span className="chip"><i className={`dot${health && !health.gbrain ? ' bad' : ''}`} />GBrain · {health ? (health.gbrain ? 'connected' : 'offline') : '…'}</span>
-              <span className="chip"><i className={`dot${health?.model === 'down' ? ' bad' : ''}`} />{health ? model : '…'}</span>
-              <span className="chip mono">{plant.clock}</span>
-              <span className="who"><span className="av">ZZ</span><span className="wn"><b>Zubair</b><span>HMI lead</span></span></span>
-            </div>
-          </div>
-          <div className="hero-c">
-            <div className="hi">Hey Zubair 👋</div>
-            <h1>What should we change on Station 01?</h1>
-            <form className={`ask${pending ? ' busy' : ''}`} onSubmit={(e) => { e.preventDefault(); send(text) }}>
-              {sel ? <span className="target" title={sel.path}>{sel.name}</span> : null}
-              <input
-                ref={inputRef}
-                value={text}
-                disabled={pending}
-                placeholder={sel ? `Change or ask about ${sel.name}…` : 'Just ask me anything about the plant…'}
-                onChange={(e) => setText(e.target.value)}
-              />
-              {pending ? <span className="ask-t"><i className="pulse" />{elapsed.toFixed(0)} s</span> : null}
-              <button type="submit" className="go" disabled={!sel || pending || !text.trim()} aria-label="Send">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </button>
-            </form>
-            <div className="sugg">
-              {!sel ? <span className="hint">Select a component below first</span> : pending ? <span className="hint">Thinking with GBrain… reasoning over team memory</span> : (
-                sel.suggestions.map((s) => (
-                  <button key={s} onClick={() => { setText(s); inputRef.current?.focus() }}>{s}</button>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-
-        <Screen plant={plant} props={props} selected={sel?.id ?? null} flash={flash} onSelect={select} feed={feed} />
-
-        <footer className="modelbar card">
-          <span className="tile"><Ico n="model" /></span>
-          <span className="mb-l">Model</span>
-          <span className="mb-v">{model}</span>
-          <span className="sep" />
-          <span className="mb-l">Pairs learned</span>
-          <span className="mb-n">{train ? train.pairs : '—'}</span>
-          <span className="sep" />
-          <span className="mb-l">Next LoRA step</span>
-          <span className="prog"><i style={{ width: `${(k / 8) * 100}%` }} /></span>
-          <span className="mb-n">{train ? `${k}/8` : '—/8'}</span>
-          <div className="seg">
-            <button className={!tuned ? 'on' : ''} onClick={() => setTuned(false)}>Base</button>
-            <button className={tuned ? 'on' : ''} onClick={() => setTuned(true)}>Tuned</button>
-          </div>
-        </footer>
-      </div>
-
-      <aside className="drawer" aria-hidden={!sel}>
-        <div className="dw">
-          {sel && (
-            <>
-              <div className="dw-h">
-                <span className="tile"><Ico n="overview" /></span>
-                <div className="id">
-                  <h2>{sel.name}</h2>
-                  <div className="type">{sel.type}</div>
-                </div>
-                <button className="x" onClick={() => select('')}>Esc</button>
+        ) : (
+          <>
+            <div className="insp-body">
+              <div className="id">
+                <h2>{sel.name}</h2>
+                <div className="type">{sel.type}</div>
+                <div className="path">{sel.path}</div>
               </div>
-              <div className="path">{sel.path}</div>
-              <div className="insp-body">
+
+              {!result && (
+                <section>
+                  <div className="lbl">Current props</div>
+                  <dl className="kv">
+                    {Object.entries(current).map(([key, v]) => (
+                      <div key={key}><dt>{key}</dt><dd>{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</dd></div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+
+              <section>
+                <div className="lbl">Change or ask</div>
+                <textarea
+                  ref={inputRef}
+                  rows={3}
+                  value={text}
+                  disabled={pending}
+                  placeholder="Describe a change, or ask what this is…"
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }}
+                />
+                <div className="send-row">
+                  <span className="hint">Enter to send · Shift+Enter for a new line</span>
+                  <button className="send" disabled={pending || !text.trim()} onClick={() => send(text)}>{pending ? 'Sending…' : 'Send'}</button>
+                </div>
+                {!result && !pending && (
+                  <div className="sugg">
+                    {sel.suggestions.map((s) => (
+                      <button key={s} onClick={() => { setText(s); inputRef.current?.focus() }}>{s}</button>
+                    ))}
+                  </div>
+                )}
                 {wait && (
                   <div className="thinking" role="status" aria-live="polite">
                     <div className="th-h">
@@ -396,57 +372,41 @@ export default function App() {
                   </div>
                 )}
                 {error && !pending && <div className="err-line" title={error}>Request failed: {error}</div>}
+              </section>
 
-                {!result && !wait && (
+              {result && result.kind === 'answer' && (
+                <section>
+                  <div className="lbl">Answer</div>
+                  <p className="answer">{result.answer || 'No answer text returned.'}</p>
+                </section>
+              )}
+
+              {result && result.kind === 'patch' && (
+                <>
                   <section>
-                    <div className="lbl">Current props</div>
-                    <dl className="kv">
-                      {Object.entries(current).map(([key, v]) => (
-                        <div key={key}><dt>{key}</dt><dd>{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</dd></div>
-                      ))}
-                    </dl>
+                    <div className="lbl">Proposed patch</div>
+                    {diffRows.length === 0 ? <p className="why dim">No changes: every proposed value matches the current props.</p> : (
+                      <ul className="diff">
+                        {diffRows.map(([key, v]) => (
+                          <li key={key}>
+                            <span className="dk">{key}</span>
+                            <span className="dold">{show(result.before[key])}</span>
+                            <span className="arr">→</span>
+                            <span className="dnew">{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </section>
-                )}
-
-                {result && (
                   <section>
-                    <div className="lbl">You asked</div>
-                    <p className="why">“{result.instruction}”</p>
+                    <div className="lbl">Why</div>
+                    <p className="why">{result.rationale || '—'}</p>
                   </section>
-                )}
+                </>
+              )}
 
-                {result && result.kind === 'answer' && (
-                  <section>
-                    <div className="lbl">Answer</div>
-                    <p className="answer">{result.answer || 'No answer text returned.'}</p>
-                  </section>
-                )}
-
-                {result && result.kind === 'patch' && (
-                  <>
-                    <section>
-                      <div className="lbl">Proposed patch</div>
-                      {diffRows.length === 0 ? <p className="why dim">No changes: every proposed value matches the current props.</p> : (
-                        <ul className="diff">
-                          {diffRows.map(([key, v]) => (
-                            <li key={key}>
-                              <span className="dk">{key}</span>
-                              <span className="dold">{show(result.before[key])}</span>
-                              <span className="arr">→</span>
-                              <span className="dnew">{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </section>
-                    <section>
-                      <div className="lbl">Why</div>
-                      <p className="why">{result.rationale || '—'}</p>
-                    </section>
-                  </>
-                )}
-
-                {result && (
+              {result && (
+                <>
                   <section>
                     <div className="lbl">Rules used from GBrain</div>
                     {result.rules_cited.length === 0 ? <p className="why dim">No team rules matched.</p> : (
@@ -457,25 +417,40 @@ export default function App() {
                       </ul>
                     )}
                   </section>
-                )}
-                {confirm && !result && <div className="confirm"><i className="mark" />{confirm}</div>}
-                {!result && !wait && !confirm && <p className="why dim">Type a change or a question in the bar above, then press Enter.</p>}
+                </>
+              )}
+              {confirm && !result && <div className="confirm"><i className="mark" />{confirm}</div>}
+            </div>
+            {result && result.kind === 'patch' && (
+              <div className="actions">
+                <button className="primary" onClick={accept}>Accept</button>
+                <button onClick={discard}>Discard</button>
               </div>
-              {result && result.kind === 'patch' && (
-                <div className="actions">
-                  <button className="primary" onClick={accept}>Accept</button>
-                  <button onClick={discard}>Discard</button>
-                </div>
-              )}
-              {result && result.kind === 'answer' && (
-                <div className="actions">
-                  <button onClick={clearAnswer}>Ask another</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            )}
+            {result && result.kind === 'answer' && (
+              <div className="actions small">
+                <button onClick={clearAnswer}>Ask another</button>
+              </div>
+            )}
+          </>
+        )}
       </aside>
+
+      <footer className="modelbar">
+        <span className="mb-l">Model</span>
+        <span className="mb-v">{model}</span>
+        <span className="sep" />
+        <span className="mb-l">Pairs learned</span>
+        <span className="mb-n">{train ? train.pairs : '—'}</span>
+        <span className="sep" />
+        <span className="mb-l">Next training step</span>
+        <span className="prog"><i style={{ width: `${(k / 8) * 100}%` }} /></span>
+        <span className="mb-n">{train ? `${k}/8` : '—/8'}</span>
+        <div className="seg">
+          <button className={!tuned ? 'on' : ''} onClick={() => setTuned(false)}>Base</button>
+          <button className={tuned ? 'on' : ''} onClick={() => setTuned(true)}>Tuned</button>
+        </div>
+      </footer>
     </div>
   )
 }

@@ -2,3 +2,5 @@
 {"line": "- 2026-09-27 16:12 \u2014 Zubair: P-102 (P102) \u2014 \"Add speed % and amps under the pump\" \u2192 showSpeed on, showAmps on", "gbrain": true}
 {"line": "- 2026-09-27 16:12 \u2014 Zubair: P-102 (P102) \u2014 \"Show running state per our standard\" \u2192 runFill #4A4A48, runLabel RUN, faultColor #E0301E", "gbrain": true}
 {"line": "- 2026-09-27 16:14 \u2014 Zubair: T-102 (T102) \u2014 \"can u change the percent to ms?\" \u2192 showLimits on, hi 90, lo 10, tag [default]Station01/T-102/LevelPct", "gbrain": true}
+{"line": "- 2026-09-27 16:26 \u2014 Zubair: T-102 (T102) \u2014 \"Show HI and LO limit marks\" \u2192 showLimits on", "gbrain": true}
+{"line": "- 2026-09-27 16:32 \u2014 Zubair: Alarm T-102 (Level high) acknowledged", "gbrain": true}

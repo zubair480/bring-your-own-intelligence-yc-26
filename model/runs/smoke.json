@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-09-27T23:31:17.128473+00:00",
+  "checkpoint": "river://a88cc64d-4dd0-4936-88cb-53e81bad4b9b/sampler_weights/faceplate-20260927T232807Z-inf",
+  "base_model": "Qwen/Qwen3.8-27B-FP8",
+  "checks_before_server_postprocessing": true,
+  "results": [
+    {
+      "instruction": "Make the running pump green.",
+      "expected": {
+        "runFill": "#4A4A48"
+      },
+      "output": {
+        "patch": {
+          "runFill": "#4A4A48"
+        },
+        "model": "Qwen/Qwen3.8-27B-FP8+faceplate-lora"
+      },
+      "pass": true,
+      "checks": {
+        "json": true,
+        "keys": true,
+        "no_green": true,
+        "palette": true,
+        "tags": true,
+        "units": true,
+        "pass": true,
+        "patch": {
+          "runFill": "#4A4A48"
+        }
+      },
+      "seconds": 30.52
+    },
+    {
+      "instruction": "Show pump speed and motor current on the pump faceplate.",
+      "expected": {
+        "showSpeed": true,
+        "showAmps": true
+      },
+      "output": {
+        "patch": {
+          "showSpeed": true,
+          "showAmps": true
+        },
+        "model": "Qwen/Qwen3.8-27B-FP8+faceplate-lora"
+      },
+      "pass": true,
+      "checks": {
+        "json": true,
+        "keys": true,
+        "no_green": true,
+        "palette": true,
+        "tags": true,
+        "units": true,
+        "pass": true,
+        "patch": {
+          "showSpeed": true,
+          "showAmps": true
+        }
+      },
+      "seconds": 2.16
+    }
+  ],
+  "pass": true
+}
