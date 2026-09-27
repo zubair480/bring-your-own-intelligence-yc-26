@@ -30,7 +30,7 @@ for p in (str(REPO_ROOT), str(SERVER_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from gbrain_client import GBrainClient, GBrainError  # noqa: E402
+from gbrain_client import GBrainClient, GBrainError, load_env  # noqa: E402
 
 DATA_DIR = SERVER_DIR / "data"
 PAIRS_PATH = DATA_DIR / "pairs.jsonl"
@@ -243,7 +243,8 @@ def summarize(patch: dict) -> str:
     return ", ".join(f"{k} {fmt(v)}" for k, v in patch.items())
 
 
-def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, props: dict) -> tuple[dict, list[str]]:
+def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, props: dict,
+                 allow_default: bool = True) -> tuple[dict, list[str]]:
     t = normalize(instruction)
     p: dict[str, Any] = {}
     used: list[str] = []
@@ -265,7 +266,7 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
         if has(t, r"faults?|faulted|trips?|tripped|alarms?|fail\w*|abnormal|standard|warn\w*|amber"):
             p["faultColor"] = WARNING if has(t, r"warn\w*|amber|yellow|orange") else ALARM_HIGH
             used.append("abnormal")
-        if not p:
+        if not p and allow_default:
             p = {"runFill": RUNNING, "runLabel": "RUN", "faultColor": ALARM_HIGH}
             used = ["running"]
         _ = eq
@@ -289,7 +290,7 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
         if has(t, r"tags?|bind\w*|point|level|standard|path"):
             p["tag"] = f"[default]Station01/{eq}/LevelPct"
             used.append("tags")
-        if not p:
+        if not p and allow_default:
             p = {"showLimits": True, "hi": 90, "lo": 10, "tag": f"[default]Station01/{eq}/LevelPct"}
             used = ["abnormal", "tags"]
 
@@ -308,7 +309,7 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
         if ack is not None:
             p["showAckAll"] = ack
             used.append("alarms")
-        if not p:
+        if not p and allow_default:
             p = {"minPriority": "High", "showAckAll": True}
             used = ["alarms"]
 
@@ -339,7 +340,7 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
                     p["secondAxis"] = f"[default]Station01/{eq}/{point}"
                     used.append("tags")
                     break
-        if not p:
+        if not p and allow_default:
             p = {"rangeMinutes": 480}
             used = ["trend"]
 
@@ -383,14 +384,15 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
         bar = wants(t, r"bars?|gauge|meter|progress|fill")
         if bar is not None:
             p["showBar"] = bar
-        if not p:
+        if not p and allow_default:
             p = {"units": "%"}
             used = ["units"]
 
     elif fam == "valve":
         v = wants(t, r"open\w*|percent|pct|position|%|standard|status|state")
-        p["showOpenPct"] = True if v is None else v
-        used.append("units")
+        if v is not None or allow_default:
+            p["showOpenPct"] = True if v is None else v
+            used.append("units")
 
     elif fam == "sensor":
         tot = wants(t, r"total\w*|cumulative|accumulated|sum")
@@ -407,7 +409,7 @@ def rules_engine(fam: str, instruction: str, name: str, cid: str, path: str, pro
         elif has(t, r"low flow|low|warn\w*|alarm\w*|dry|starv\w*"):
             p["warnBelow"] = props.get("warnBelow") or 50
             used.append("abnormal")
-        if not p:
+        if not p and allow_default:
             p = {"showTotal": True}
             used = ["units"]
 
@@ -509,9 +511,284 @@ class AcceptReq(BaseModel):
 _last_edit: dict[str, dict] = {}  # component_id -> last /api/edit context, enriches training pairs
 
 
+# --------------------------------------------------------------------------
+# GBrain `think` (LLM over team memory): primary engine when no River key
+# --------------------------------------------------------------------------
+THINK_TIMEOUT_S = float(os.environ.get("FACEPLATE_THINK_TIMEOUT", "40"))
+_think_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+KEY_TYPES: dict[str, str] = {
+    "runFill": "hex color", "runLabel": "string", "showSpeed": "bool", "showAmps": "bool",
+    "faultColor": "hex color",
+    "showLimits": "bool", "hi": "number", "lo": "number", "showVolume": "bool", "tag": "string",
+    "minPriority": "priority", "showAckAll": "bool",
+    "rangeMinutes": "number", "secondAxis": "string|null",
+    "units": "string", "warnAbove": "number|null", "showBar": "bool",
+    "showOpenPct": "bool",
+    "showTotal": "bool", "warnBelow": "number|null",
+    "note": "string", "label": "string",
+}
+TYPE_DOC = {
+    "hex color": 'string, hex like "#4A4A48"', "bool": "boolean", "number": "number",
+    "number|null": "number or null", "string": "string", "string|null": "string or null",
+    "priority": '"High" | "Medium" | "Low"',
+}
+ALLOWED_ORDER = {
+    "pump": ["runFill", "runLabel", "showSpeed", "showAmps", "faultColor"],
+    "tank": ["showLimits", "hi", "lo", "showVolume", "tag"],
+    "alarm": ["minPriority", "showAckAll"],
+    "chart": ["rangeMinutes", "secondAxis"],
+    "label": ["units", "warnAbove", "showBar"],
+    "valve": ["showOpenPct"],
+    "sensor": ["showTotal", "warnBelow"],
+    "container": ["note"],
+}
+SUGGESTIONS = {
+    "pump": ["Show running state per our standard", "Add speed % and amps under the pump"],
+    "tank": ["Show HI and LO limit marks", "Add volume in gallons under the level"],
+    "alarm": ["Only show priority High and above", "Add an Ack All button"],
+    "chart": ["Change the range to 8 hours", "Add the flow rate as a second axis"],
+    "label": ["Turn amber above 85 %", "Add a level bar under the number"],
+    "valve": ["Show open percent next to the valve", "Hide the open percent"],
+    "sensor": ["Show the running total", "Warn below 50 GPM"],
+    "container": ["Add a note that this screen follows ISA-101", "Note the shift owner for this screen"],
+}
+QUESTION_RE = re.compile(r"\b(what|why|how|explain|who|whats|what's)\b", re.I)
+LIMIT_RE = re.compile(r"\b(limits?|hi|lo|high|low|thresholds?|setpoints?|max|min|maximum|minimum|bands?|overflow)\b", re.I)
+SLUG_RE = re.compile(r"\[([a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_.-]*)+)\]")
+
+
+def allowed_keys(fam: str) -> list[str]:
+    keys = list(ALLOWED_ORDER.get(fam, ALLOWED_ORDER["container"]))
+    if fam != "container":
+        for k in ("units", "label"):
+            if k not in keys:
+                keys.append(k)
+    return keys
+
+
+def river_key_set() -> bool:
+    return bool(os.environ.get("RIVER_API_KEY") or load_env().get("RIVER_API_KEY"))
+
+
+def is_question(text: str) -> bool:
+    return QUESTION_RE.search(text or "") is not None
+
+
+def _coerce(kind: str, v: Any) -> tuple[bool, Any]:
+    """Return (ok, value) for one patch value against its declared type."""
+    if kind.endswith("|null") and v is None:
+        return True, None
+    base = kind.split("|")[0]
+    if base == "bool":
+        if isinstance(v, bool):
+            return True, v
+        if isinstance(v, (int, float)):
+            return True, bool(v)
+        if isinstance(v, str) and v.strip().lower() in ("true", "on", "yes", "1", "show"):
+            return True, True
+        if isinstance(v, str) and v.strip().lower() in ("false", "off", "no", "0", "hide"):
+            return True, False
+        return False, None
+    if base == "number":
+        if isinstance(v, bool) or v is None:
+            return False, None
+        try:
+            f = float(v) if isinstance(v, (int, float)) else float(str(v).strip().rstrip("%").strip())
+        except ValueError:
+            return False, None
+        return True, int(f) if f.is_integer() else f
+    if base == "hex color":
+        if isinstance(v, str) and re.fullmatch(r"#?[0-9a-fA-F]{6}", v.strip()):
+            return True, "#" + v.strip().lstrip("#").upper()
+        return False, None
+    if base == "priority":
+        m = {"high": "High", "critical": "High", "urgent": "High", "medium": "Medium", "med": "Medium", "low": "Low"}
+        lv = m.get(str(v).strip().lower()) if v is not None else None
+        return (True, lv) if lv else (False, None)
+    if base == "string":
+        if v is None or isinstance(v, (dict, list)):
+            return False, None
+        sv = str(v).strip()
+        return (True, sv[:160]) if sv else (False, None)
+    return False, None
+
+
+def validate_patch(fam: str, patch: Any, instruction: str) -> dict:
+    if not isinstance(patch, dict):
+        return {}
+    keys = allowed_keys(fam)
+    out: dict[str, Any] = {}
+    for k, v in patch.items():
+        if k not in keys:
+            continue
+        ok, cv = _coerce(KEY_TYPES.get(k, "string"), v)
+        if ok:
+            out[k] = cv
+    if fam == "tank" and not LIMIT_RE.search(instruction or ""):
+        for k in ("hi", "lo", "showLimits"):  # never touch limits unless asked
+            out.pop(k, None)
+    return enforce_isa101(out)
+
+
+def build_think_prompt(req: "EditReq", fam: str, props: dict) -> str:
+    keys = allowed_keys(fam)
+    key_lines = "\n".join(f"- {k}: {TYPE_DOC[KEY_TYPES[k]]}" for k in keys)
+    return (
+        "You are the HMI assistant for an Ignition Perspective screen at our plant. "
+        "Use the team's HMI style guide (ISA-101), tag conventions and decision log.\n\n"
+        f"Component: name={req.component_name or req.component_id}, type={req.component_type}, "
+        f"path={req.component_path}, id={req.component_id}\n"
+        f"current_props: {json.dumps(props, ensure_ascii=False)[:1500]}\n\n"
+        f"ALLOWED patch keys for this component (no others exist):\n{key_lines}\n\n"
+        f'User instruction (verbatim): "{req.instruction}"\n\n'
+        "Decide if this is a QUESTION (explain, what, why, how, who) or a CHANGE request. "
+        "Reply with ONLY one JSON object, no prose, no code fences:\n"
+        '{"kind":"answer","answer":"<2-5 plain sentences grounded in team memory, cite page slugs>"}\n'
+        "or\n"
+        '{"kind":"patch","patch":{<only allowed keys>},"rationale":"<one sentence naming the team rule used>"}\n'
+        "Never change HI/LO limits unless explicitly asked. Follow the ISA-101 style guide and tag "
+        "conventions (tags are [default]Station01/<Equip>/<Point>; running = #4A4A48 never green, "
+        "alarm high #E0301E, warning #F5A623). If the change can't be expressed with the allowed keys, "
+        "reply kind=answer explaining what IS possible."
+    )
+
+
+def extract_json_obj(text: str) -> Optional[dict]:
+    """Find the first JSON object with kind/patch/answer in text (handles fences and prose)."""
+    if not text:
+        return None
+    candidates = [text] + re.findall(r"```(?:json)?\s*(.*?)```", text, flags=re.S)
+    dec = json.JSONDecoder()
+    for cand in candidates:
+        c = cand.strip()
+        try:
+            obj = json.loads(c)
+            if isinstance(obj, dict) and ({"kind", "patch", "answer"} & obj.keys()):
+                return obj
+        except ValueError:
+            pass
+        for i, ch in enumerate(c):
+            if ch != "{":
+                continue
+            try:
+                obj, _ = dec.raw_decode(c[i:])
+            except ValueError:
+                continue
+            if isinstance(obj, dict) and ({"kind", "patch"} & obj.keys()):
+                return obj
+    return None
+
+
+_think_client: dict[str, Any] = {"c": None}
+
+
+def _think_raw(question: str) -> dict:
+    c = _think_client["c"]
+    if c is None:
+        c = GBrainClient(timeout=THINK_TIMEOUT_S + 5)
+        c.initialize()
+        _think_client["c"] = c
+    try:
+        return c.call_tool("think", {"question": question, "rounds": 1, "save": False})
+    except Exception:
+        _think_client["c"] = None
+        raise
+
+
+def call_think(question: str) -> tuple[Optional[dict], str, list[str]]:
+    """Return (decision obj or None, answer text, cited slugs). Raises on failure/timeout.
+
+    think returns one text block holding JSON: {question, answer, citations:[{page_slug}], modelUsed, ...}.
+    Our JSON decision lives inside `answer`, possibly wrapped in prose or fences.
+    """
+    res = _think_pool.submit(_think_raw, question).result(timeout=THINK_TIMEOUT_S)
+    outer = GBrainClient.data(res)
+    slugs: list[str] = []
+    obj = None
+    if isinstance(outer, dict):
+        raw_answer = outer.get("answer")
+        for cit in outer.get("citations") or []:
+            s = cit.get("page_slug") if isinstance(cit, dict) else None
+            if s and s not in slugs:
+                slugs.append(s)
+        if isinstance(raw_answer, dict):
+            obj, answer_text = raw_answer, json.dumps(raw_answer)
+        else:
+            answer_text = str(raw_answer or "")
+            obj = extract_json_obj(answer_text)
+    else:
+        answer_text = str(outer or "")
+        obj = extract_json_obj(answer_text)
+    for s in SLUG_RE.findall(answer_text):
+        if s not in slugs:
+            slugs.append(s)
+    return obj, answer_text, slugs
+
+
+def merge_cited(cited: list[dict], slugs: list[str]) -> list[dict]:
+    have = {c.get("slug") for c in cited}
+    out = list(cited)
+    for s in slugs:
+        if s not in have:
+            out.append({"slug": s, "title": s, "snippet": "Cited by GBrain think."})
+            have.add(s)
+    return out[:5]
+
+
+def clean_answer(text: str) -> str:
+    t = re.sub(r"```.*?```", "", text or "", flags=re.S).strip()
+    return re.sub(r"\s+", " ", t)[:1200]
+
+
+def fallback_answer(req: "EditReq", fam: str, cited: list[dict]) -> str:
+    name = req.component_name or req.component_id
+    parts = [f"{name} is a {req.component_type or fam} component"
+             + (f" at {req.component_path}" if req.component_path else "") + "."]
+    if cited:
+        parts.append("From team memory: " + " ".join(
+            f"{c.get('title') or c['slug']} ({c['slug']}): {(c.get('snippet') or '').rstrip('.')}." for c in cited[:3]))
+    else:
+        parts.append("Team memory (GBrain) is unreachable right now, so I can't cite the standard.")
+    return " ".join(parts)
+
+
+def no_map_answer(req: "EditReq", fam: str) -> str:
+    name = req.component_name or req.component_id
+    sugg = getattr(req, "suggestions", None)
+    if not (isinstance(sugg, list) and len(sugg) >= 2 and all(isinstance(x, str) for x in sugg[:2])):
+        sugg = SUGGESTIONS.get(fam, SUGGESTIONS["container"])
+    return f'I couldn\'t map that to a change for {name}. Try: "{sugg[0]}" or "{sugg[1]}".'
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "gbrain": gbrain_ok(), "model": "qwen-lora" if get_model_fn() else "rules"}
+    gb = gbrain_ok()
+    if FORCE_RULES:
+        model = "rules"
+    elif river_key_set() and get_model_fn():
+        model = "qwen-lora"
+    elif gb:
+        model = "gbrain-think"
+    else:
+        model = "rules"
+    return {"ok": True, "gbrain": gb, "model": model}
+
+
+def _respond(t0, req, props, kind, patch, answer, rationale, cited, model_used):
+    _last_edit[req.component_id] = {
+        "component_type": req.component_type, "component_path": req.component_path,
+        "current_props": props, "rules": [c.get("snippet", "") for c in cited], "model": model_used,
+    }
+    return {
+        "kind": kind,
+        "patch": patch if kind == "patch" else {},
+        "answer": answer if kind == "answer" else "",
+        "rationale": rationale or "",
+        "rules_cited": cited,
+        "model": model_used,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+    }
 
 
 @app.post("/api/edit")
@@ -519,49 +796,70 @@ def edit(req: EditReq):
     t0 = time.perf_counter()
     props = req.current_props or {}
     fam = family(req.component_type, req.component_name)
-    cited, rule_texts = cite_rules(req.instruction, req.component_name)
+    name = req.component_name or req.component_id
+    question = is_question(req.instruction)
 
-    patch, rationale, model_used = None, None, "rules"
-    fn = get_model_fn()
+    cite_future = _pool.submit(cite_rules, req.instruction, req.component_name)
+
+    def cited_now() -> tuple[list[dict], list[str]]:
+        try:
+            return cite_future.result(timeout=15)
+        except Exception:
+            return [], []
+
+    # 1. River LoRA model: only when a River key is configured and this is a change request.
+    fn = get_model_fn() if (river_key_set() and not question) else None
     if fn is not None:
-        component = {
-            "id": req.component_id, "type": req.component_type, "path": req.component_path,
-            "name": req.component_name, "props": props,
-        }
+        cited, rule_texts = cited_now()
+        component = {"id": req.component_id, "type": req.component_type, "path": req.component_path,
+                     "name": req.component_name, "props": props}
         try:
             out = _pool.submit(fn, component, req.instruction, rule_texts or [c["snippet"] for c in cited]).result(
-                timeout=MODEL_TIMEOUT_S
-            )
-            mp = out.get("patch") if isinstance(out, dict) else None
-            if isinstance(mp, dict):
-                allowed = ALLOWED.get(fam)
-                mp = {k: v for k, v in mp.items() if not allowed or k in allowed}
+                timeout=MODEL_TIMEOUT_S)
+            mp = validate_patch(fam, out.get("patch") if isinstance(out, dict) else None, req.instruction)
             if mp:
-                patch = enforce_isa101(mp)
-                model_used = str(out.get("model") or "qwen-lora")
                 rationale = out.get("rationale")
+                if not rationale:
+                    _, keys = rules_engine(fam, req.instruction, name, req.component_id, req.component_path, props)
+                    rationale = make_rationale(keys, name, mp, cited)
+                return _respond(t0, req, props, "patch", mp, "", rationale, cited, "qwen-lora")
         except Exception:
-            patch = None
+            pass
 
-    if not patch:
-        patch, keys = rules_engine(fam, req.instruction, req.component_name, req.component_id, req.component_path, props)
-        rationale = make_rationale(keys, req.component_name, patch, cited)
-        model_used = "rules"
-    elif not rationale:
-        _, keys = rules_engine(fam, req.instruction, req.component_name, req.component_id, req.component_path, props)
-        rationale = make_rationale(keys, req.component_name, patch, cited)
+    # 2. GBrain think (LLM over team memory).
+    if not FORCE_RULES:
+        try:
+            obj, prose, slugs = call_think(build_think_prompt(req, fam, props))
+            cited, _ = cited_now()
+            cited = merge_cited(cited, slugs)
+            kind = str((obj or {}).get("kind") or "").lower()
+            if obj is not None and (kind == "patch" or (not kind and "patch" in obj)):
+                patch = validate_patch(fam, obj.get("patch"), req.instruction)
+                if patch:
+                    rationale = str(obj.get("rationale") or "").strip() or \
+                        f"Per the team HMI standard, {name} gets {summarize(patch)}."
+                    return _respond(t0, req, props, "patch", patch, "", rationale, cited, "gbrain-think")
+                ans = str(obj.get("rationale") or "").strip()
+                ans = (ans + " " if ans else "") + no_map_answer(req, fam)
+                return _respond(t0, req, props, "answer", {}, ans, "", cited, "gbrain-think")
+            if obj is not None and obj.get("answer"):
+                return _respond(t0, req, props, "answer", {}, clean_answer(str(obj["answer"])), "", cited,
+                                "gbrain-think")
+            if prose.strip():  # think answered in prose instead of JSON
+                return _respond(t0, req, props, "answer", {}, clean_answer(prose), "", cited, "gbrain-think")
+        except Exception:
+            pass
 
-    _last_edit[req.component_id] = {
-        "component_type": req.component_type, "component_path": req.component_path,
-        "current_props": props, "rules": [c["snippet"] for c in cited], "model": model_used,
-    }
-    return {
-        "patch": patch,
-        "rationale": rationale,
-        "rules_cited": cited,
-        "model": model_used,
-        "latency_ms": int((time.perf_counter() - t0) * 1000),
-    }
+    # 3. Fallback: rules engine only when a keyword matched. Never a default patch.
+    cited, _ = cited_now()
+    if question:
+        return _respond(t0, req, props, "answer", {}, fallback_answer(req, fam, cited), "", cited, "rules")
+    patch, keys = rules_engine(fam, req.instruction, name, req.component_id, req.component_path, props,
+                               allow_default=False)
+    patch = validate_patch(fam, patch, req.instruction)
+    if patch:
+        return _respond(t0, req, props, "patch", patch, "", make_rationale(keys, name, patch, cited), cited, "rules")
+    return _respond(t0, req, props, "answer", {}, no_map_answer(req, fam), "", cited, "rules")
 
 
 # --------------------------------------------------------------------------

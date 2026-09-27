@@ -51,14 +51,33 @@ function usePlant(): Plant {
 /* ---------- api ---------- */
 
 interface Rule { slug: string; title?: string; snippet: string }
-interface EditResp { patch: Record<string, unknown>; rationale: string; rules_cited: Rule[]; model: string; latency_ms: number }
+type Kind = 'patch' | 'answer'
+interface EditResp { kind?: Kind; patch?: Record<string, unknown>; answer?: string; rationale?: string; rules_cited?: Rule[]; model: string; latency_ms: number }
 interface AcceptResp { ok: boolean; gbrain_logged: boolean; logged_line: string; pairs_total: number; next_train_in: number }
 interface Health { ok: boolean; gbrain: boolean; model: string }
 
-async function post<T>(url: string, body: unknown): Promise<T> {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 100)}`)
-  return r.json() as Promise<T>
+const MODEL_LABEL: Record<string, string> = {
+  'gbrain-think': 'GBrain think (LLM)',
+  'qwen-lora': 'Qwen3.8 LoRA · River',
+  rules: 'Team rules engine',
+}
+const modelLabel = (m?: string | null) => (!m ? '…' : m === 'down' ? 'offline' : MODEL_LABEL[m] ?? m)
+
+const TIMEOUT_MS = 60000
+
+async function post<T>(url: string, body: unknown, timeoutMs = TIMEOUT_MS): Promise<T> {
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), timeoutMs)
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal })
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 100)}`)
+    return (await r.json()) as T
+  } catch (e) {
+    if (ctl.signal.aborted) throw new Error(`Timed out after ${timeoutMs / 1000} s`)
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /* ---------- activity feed ---------- */
@@ -67,10 +86,24 @@ type StepState = 'wait' | 'run' | 'done' | 'err'
 interface Step { key: string; label: string; detail?: string; state: StepState; t?: string }
 interface Req { id: number; comp: Comp; instruction: string; t: string; steps: Step[]; active: boolean }
 
-interface Result extends EditResp { reqId: number; before: Record<string, unknown>; instruction: string }
+interface Result {
+  kind: Kind
+  patch: Record<string, unknown>
+  answer: string
+  rationale: string
+  rules_cited: Rule[]
+  model: string
+  latency_ms: number
+  reqId: number
+  comp: Comp
+  before: Record<string, unknown>
+  instruction: string
+}
 
 const show = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 const isHex = (v: unknown) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)
+const norm = (v: unknown) => (v === undefined || v === '' ? null : typeof v === 'string' && isHex(v) ? v.toLowerCase() : v)
+const same = (a: unknown, b: unknown) => JSON.stringify(norm(a)) === JSON.stringify(norm(b))
 
 export default function App() {
   const plant = usePlant()
@@ -86,15 +119,24 @@ export default function App() {
   const [train, setTrain] = useState<{ pairs: number; next: number } | null>(null)
   const [tuned, setTuned] = useState(true)
   const [lastModel, setLastModel] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [wait, setWait] = useState<{ start: number; instruction: string } | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const nextId = useRef(1)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!wait) return
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [wait])
 
   const selRef = useRef<string | null>(null)
   const select = useCallback((id: string) => {
     const c = id ? BY_ID[id] ?? null : null
     if (selRef.current === (c?.id ?? null)) return
     selRef.current = c?.id ?? null
-    setSel(c); setResult(null); setConfirm(null); setText('')
+    setSel(c); setResult(null); setConfirm(null); setError(null); setText('')
   }, [])
 
   useEffect(() => {
@@ -117,17 +159,20 @@ export default function App() {
     patchReq(id, (r) => ({ ...r, steps: r.steps.map((st) => (st.key === key ? { ...st, ...s } : st)) }))
   const addSteps = (id: number, steps: Step[]) => patchReq(id, (r) => ({ ...r, steps: [...r.steps, ...steps] }))
 
-  const send = async (instruction: string) => {
-    if (!sel || !instruction.trim() || pending) return
+  const send = async (raw: string) => {
+    const instruction = raw.trim()
+    if (!sel || !instruction || pending) return
     const comp = sel
     const id = nextId.current++
     const before = { ...DEFAULTS[comp.id], ...props[comp.id] }
-    setPending(true); setResult(null); setConfirm(null)
+    setPending(true); setResult(null); setConfirm(null); setError(null)
+    const start = Date.now()
+    setNow(start); setWait({ start, instruction })
     setReqs((rs) => [{
-      id, comp, instruction: instruction.trim(), t: clock(), active: true,
+      id, comp, instruction, t: clock(), active: true,
       steps: [
         { key: 'rules', label: 'GBrain — searching team rules', state: 'run', t: clock() },
-        { key: 'model', label: 'Model — drafting edit', state: 'wait' },
+        { key: 'model', label: 'GBrain think — reasoning over team memory', state: 'wait' },
         { key: 'valid', label: 'Validated patch', state: 'wait' },
       ],
     }, ...rs.map((r) => ({ ...r, active: false }))])
@@ -135,30 +180,50 @@ export default function App() {
     try {
       const r = await post<EditResp>('/api/edit', {
         component_id: comp.id, component_type: comp.type, component_path: comp.path,
-        component_name: comp.name, instruction: instruction.trim(), current_props: before,
+        component_name: comp.name, instruction, current_props: before,
       })
       clearTimeout(timer)
-      const n = r.rules_cited?.length ?? 0
+      const rawPatch = r.patch && typeof r.patch === 'object' ? r.patch : {}
+      const answer = typeof r.answer === 'string' ? r.answer : ''
+      const kind: Kind = r.kind === 'answer' || (r.kind !== 'patch' && Object.keys(rawPatch).length === 0 && answer) ? 'answer' : 'patch'
+      const patch = kind === 'patch' ? rawPatch : {}
+      const rules = Array.isArray(r.rules_cited) ? r.rules_cited : []
+      const changed = Object.keys(patch).filter((key) => !same(before[key], patch[key])).length
+      const n = rules.length
       setStep(id, 'rules', { state: 'done', label: 'GBrain — team rules', detail: `${n} rule${n === 1 ? '' : 's'} found`, t: clock() })
-      setStep(id, 'model', { state: 'done', detail: `${r.model} · ${r.latency_ms} ms`, t: clock() })
-      setStep(id, 'valid', { state: 'done', detail: `${Object.keys(r.patch).length} props`, t: clock() })
-      setResult({ ...r, reqId: id, before, instruction: instruction.trim() })
+      setStep(id, 'model', { state: 'done', label: `${modelLabel(r.model)} · ${r.latency_ms} ms`, t: clock() })
+      setStep(id, 'valid', kind === 'answer'
+        ? { state: 'done', label: 'Answered', t: clock() }
+        : { state: 'done', detail: `${changed} prop${changed === 1 ? '' : 's'} changed`, t: clock() })
       setLastModel(r.model)
+      if (selRef.current === comp.id) {
+        setResult({ kind, patch, answer, rationale: r.rationale ?? '', rules_cited: rules, model: r.model, latency_ms: r.latency_ms, reqId: id, comp, before, instruction })
+      } else {
+        patchReq(id, (q) => ({ ...q, active: false }))
+      }
     } catch (e) {
       clearTimeout(timer)
       const msg = e instanceof Error ? e.message : String(e)
-      setStep(id, 'rules', { state: 'err', detail: msg, t: clock() })
-      setStep(id, 'model', { state: 'err', detail: 'not run', t: clock() })
+      setStep(id, 'rules', { state: 'err', t: clock() })
+      setStep(id, 'model', { state: 'err', label: 'GBrain think — failed', detail: msg, t: clock() })
       patchReq(id, (r) => ({ ...r, active: false }))
+      if (selRef.current === comp.id) setError(msg)
     } finally {
       setPending(false)
+      setWait(null)
     }
   }
 
+  const clearAnswer = () => {
+    if (result) patchReq(result.reqId, (r) => ({ ...r, active: false }))
+    setResult(null)
+    setText('')
+    inputRef.current?.focus()
+  }
+
   const accept = async () => {
-    if (!sel || !result) return
-    const comp = sel
-    const { patch, reqId, instruction } = result
+    if (!result) return
+    const { comp, patch, reqId, instruction } = result
     setProps((m) => ({ ...m, [comp.id]: { ...m[comp.id], ...patch } }))
     setFlash(comp.id)
     setTimeout(() => setFlash((f) => (f === comp.id ? null : f)), 1400)
@@ -192,8 +257,12 @@ export default function App() {
 
   const current = sel ? { ...DEFAULTS[sel.id], ...props[sel.id] } : {}
   const activeModel = lastModel ?? health?.model
-  const model = activeModel === 'qwen-lora' ? 'Qwen3.8 LoRA' : activeModel === 'rules' ? 'Team rules engine' : activeModel === 'down' ? 'offline' : '…'
+  const model = modelLabel(activeModel)
   const k = train ? 8 - train.next : 0
+  const elapsed = wait ? Math.max(0, (now - wait.start) / 1000) : 0
+  const diffRows = result && result.kind === 'patch'
+    ? Object.entries(result.patch).filter(([key, v]) => !same(result.before[key], v))
+    : []
 
   return (
     <div className="app">
@@ -270,45 +339,74 @@ export default function App() {
               )}
 
               <section>
-                <div className="lbl">Change</div>
+                <div className="lbl">Change or ask</div>
                 <textarea
                   ref={inputRef}
                   rows={3}
                   value={text}
                   disabled={pending}
-                  placeholder="Describe the change…"
+                  placeholder="Describe a change, or ask what this is…"
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }}
                 />
-                {!result && (
+                <div className="send-row">
+                  <span className="hint">Enter to send · Shift+Enter for a new line</span>
+                  <button className="send" disabled={pending || !text.trim()} onClick={() => send(text)}>{pending ? 'Sending…' : 'Send'}</button>
+                </div>
+                {!result && !pending && (
                   <div className="sugg">
                     {sel.suggestions.map((s) => (
                       <button key={s} onClick={() => { setText(s); inputRef.current?.focus() }}>{s}</button>
                     ))}
                   </div>
                 )}
-                {pending && <div className="working"><i className="pulse" />Searching GBrain and drafting the edit…</div>}
+                {wait && (
+                  <div className="thinking" role="status" aria-live="polite">
+                    <div className="th-h">
+                      <i className="pulse" />
+                      <span>Thinking with GBrain…</span>
+                      <span className="th-t">{elapsed.toFixed(0)} s</span>
+                    </div>
+                    <div className="th-i">“{wait.instruction}”</div>
+                    <div className="th-d">Reasoning over team memory. This can take 5–40 s.</div>
+                  </div>
+                )}
+                {error && !pending && <div className="err-line" title={error}>Request failed: {error}</div>}
               </section>
 
-              {result && (
+              {result && result.kind === 'answer' && (
+                <section>
+                  <div className="lbl">Answer</div>
+                  <p className="answer">{result.answer || 'No answer text returned.'}</p>
+                </section>
+              )}
+
+              {result && result.kind === 'patch' && (
                 <>
                   <section>
                     <div className="lbl">Proposed patch</div>
-                    <ul className="diff">
-                      {Object.entries(result.patch).map(([key, v]) => (
-                        <li key={key}>
-                          <span className="dk">{key}</span>
-                          <span className="dold">{show(result.before[key])}</span>
-                          <span className="arr">→</span>
-                          <span className="dnew">{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    {diffRows.length === 0 ? <p className="why dim">No changes: every proposed value matches the current props.</p> : (
+                      <ul className="diff">
+                        {diffRows.map(([key, v]) => (
+                          <li key={key}>
+                            <span className="dk">{key}</span>
+                            <span className="dold">{show(result.before[key])}</span>
+                            <span className="arr">→</span>
+                            <span className="dnew">{isHex(v) ? <i className="sw" style={{ background: String(v) }} /> : null}{show(v)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </section>
                   <section>
                     <div className="lbl">Why</div>
-                    <p className="why">{result.rationale}</p>
+                    <p className="why">{result.rationale || '—'}</p>
                   </section>
+                </>
+              )}
+
+              {result && (
+                <>
                   <section>
                     <div className="lbl">Rules used from GBrain</div>
                     {result.rules_cited.length === 0 ? <p className="why dim">No team rules matched.</p> : (
@@ -323,10 +421,15 @@ export default function App() {
               )}
               {confirm && !result && <div className="confirm"><i className="mark" />{confirm}</div>}
             </div>
-            {result && (
+            {result && result.kind === 'patch' && (
               <div className="actions">
                 <button className="primary" onClick={accept}>Accept</button>
                 <button onClick={discard}>Discard</button>
+              </div>
+            )}
+            {result && result.kind === 'answer' && (
+              <div className="actions small">
+                <button onClick={clearAnswer}>Ask another</button>
               </div>
             )}
           </>
@@ -335,7 +438,7 @@ export default function App() {
 
       <footer className="modelbar">
         <span className="mb-l">Model</span>
-        <span className="mb-v">{activeModel === 'rules' ? 'Team rules engine' : 'Qwen/Qwen3.8-27B-FP8 + LoRA'}</span>
+        <span className="mb-v">{model}</span>
         <span className="sep" />
         <span className="mb-l">Pairs learned</span>
         <span className="mb-n">{train ? train.pairs : '—'}</span>

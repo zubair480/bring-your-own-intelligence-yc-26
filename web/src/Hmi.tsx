@@ -65,6 +65,10 @@ const isLight = (hex: unknown) => {
 }
 
 const num = (v: unknown, d: number) => (typeof v === 'number' ? v : d)
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : typeof v === 'number' ? String(v) : null)
+const unitsOf = (p: Props, d: string) => str(p.units) ?? d
+const nameOf = (p: Props, id: string) => str(p.label) ?? BY_ID[id].name
+const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const fmt = (n: number, dp = 0) => n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 
 interface S {
@@ -98,7 +102,7 @@ function Kpi({ id, s, label, value, n, pct }: { id: string; s: S; label: string;
   const warn = typeof p.warnAbove === 'number' && n > p.warnAbove
   return (
     <Card id={id} s={s} className={`kpi${warn ? ' warn' : ''}`}>
-      <div className="lbl">{label}</div>
+      <div className="lbl kl">{str(p.label) ?? label}</div>
       <div className="big">
         {value}
         {p.units ? <span className="unit">{String(p.units)}</span> : null}
@@ -122,7 +126,7 @@ function Alarms({ s }: { s: S }) {
   return (
     <Card id="alarms" s={s} className="card alarms">
       <div className="chead">
-        <span>Active alarms <b className="count">{shown.length}</b></span>
+        <span>{str(p.label) ?? 'Active alarms'} <b className="count">{shown.length}</b></span>
         {p.showAckAll ? <span className="ack">Ack all</span> : <span className="hint">≥ {String(p.minPriority)}</span>}
       </div>
       <div className="alist">
@@ -165,8 +169,8 @@ function TankSym({ id, x, s, level }: { id: string; x: number; s: S; level: numb
   const yAt = (v: number) => top + h - 3 - (h - 6) * (v / 100)
   return (
     <Hit id={id} s={s} x={x - 34} y={top - 62} w={w + 44} h={h + 70}>
-      <text x={x + w / 2} y={top - 40} textAnchor="middle" className="st-name">{BY_ID[id].name}</text>
-      <text x={x + w / 2} y={top - 12} textAnchor="middle" className="st-val" fill={alarm ? C.hi : undefined}>{level.toFixed(1)}<tspan className="st-unit"> %</tspan></text>
+      <text x={x + w / 2} y={top - 40} textAnchor="middle" className="st-name">{clip(nameOf(p, id), 12)}</text>
+      <text x={x + w / 2} y={top - 12} textAnchor="middle" className="st-val" fill={alarm ? C.hi : undefined}>{level.toFixed(1)}<tspan className="st-unit"> {clip(unitsOf(p, '%'), 6)}</tspan></text>
       <rect x={x} y={top} width={w} height={h} rx={10} fill="none" stroke={alarm ? C.hi : C.equip} strokeWidth={2} />
       <rect x={x + 3} y={top + h - 3 - fill} width={w - 6} height={fill} rx={7} fill={C.liquid} style={{ transition: 'all 900ms ease' }} />
       {p.showLimits ? [hi, lo].map((m, i) => (
@@ -188,7 +192,7 @@ function PumpSym({ id, cy, s, i }: { id: string; cy: number; s: S; i: number }) 
   const stroke = q.fault ? String(p.faultColor) : C.equip
   return (
     <Hit id={id} s={s} x={cx - 34} y={cy - 50} w={68} h={82}>
-      <text x={cx} y={cy - 30} textAnchor="middle" className="st-name">{BY_ID[id].name}</text>
+      <text x={cx} y={cy - 30} textAnchor="middle" className="st-name">{clip(nameOf(p, id), 10)}</text>
       <circle cx={cx} cy={cy} r={22} fill={fill} stroke={stroke} strokeWidth={2} />
       <path d={`M ${cx - 8} ${cy - 11} L ${cx + 13} ${cy} L ${cx - 8} ${cy + 11} Z`} fill={glyph} stroke={q.run ? 'none' : stroke} strokeWidth={2} />
     </Hit>
@@ -203,7 +207,7 @@ function ValveSym({ id, cx, cy, s, open, below = true }: { id: string; cx: numbe
     <Hit id={id} s={s} x={cx - 34} y={below ? cy - 18 : cy - 44} w={68} h={62}>
       <path d={`M ${cx - 15} ${cy - 10} L ${cx + 15} ${cy + 10} L ${cx + 15} ${cy - 10} L ${cx - 15} ${cy + 10} Z`}
         fill={on ? C.run : C.bg} stroke={C.equip} strokeWidth={2} strokeLinejoin="round" />
-      <text x={cx} y={ly} textAnchor="middle" className="st-name">{BY_ID[id].name}{p.showOpenPct ? ` ${open}%` : ''}</text>
+      <text x={cx} y={ly} textAnchor="middle" className="st-name">{clip(nameOf(p, id), 10)}{p.showOpenPct ? ` ${open}%` : ''}</text>
     </Hit>
   )
 }
@@ -216,7 +220,7 @@ function Process({ s }: { s: S }) {
   return (
     <Card id="process" s={s} className="card process">
       <div className="chead">
-        <span>Process · suction → discharge</span>
+        <span>{str(P(s, 'process').label) ?? 'Process · suction → discharge'}</span>
         {note ? <span className="note">{note}</span> : <span className="hint">{plant.clock}</span>}
       </div>
       <svg className="pid" viewBox="0 0 760 300" preserveAspectRatio="xMidYMid meet">
@@ -238,8 +242,8 @@ function Process({ s }: { s: S }) {
         <Hit id="FT301" s={s} x={626} y={124} w={108} h={104}>
           <circle cx={680} cy={150} r={18} fill={C.bg} stroke={ftWarn ? C.warn : C.equip} strokeWidth={2} />
           <text x={680} y={156} textAnchor="middle" className="st-small">FT</text>
-          <text x={680} y={194} textAnchor="middle" className="st-name">FT-301</text>
-          <text x={680} y={218} textAnchor="middle" className="st-small" fill={ftWarn ? C.warn : undefined}>{fmt(plant.flow)} GPM</text>
+          <text x={680} y={194} textAnchor="middle" className="st-name">{clip(nameOf(ft, 'FT301'), 10)}</text>
+          <text x={680} y={218} textAnchor="middle" className="st-small" fill={ftWarn ? C.warn : undefined}>{fmt(plant.flow)} {clip(unitsOf(ft, 'GPM'), 6)}</text>
         </Hit>
       </svg>
     </Card>
@@ -273,11 +277,11 @@ function PumpCard({ id, i, s }: { id: string; i: number; s: S }) {
     <Card id={id} s={s} className="eq">
       <div className="eq-top">
         <PumpGlyph run={q.run} fill={fill} stroke={q.fault ? fault : C.equip} />
-        <span className="eq-name">{BY_ID[id].name}</span>
+        <span className="eq-name">{nameOf(p, id)}</span>
         <span className="state" style={chip}>{state}</span>
       </div>
       <div className="eq-vals">
-        {p.showSpeed ? <span className="n">{q.speed.toFixed(0)}<u>%</u></span> : null}
+        {p.showSpeed ? <span className="n">{q.speed.toFixed(0)}<u>{unitsOf(p, '%')}</u></span> : null}
         {p.showAmps ? <span className="n">{q.amps.toFixed(0)}<u>A</u></span> : null}
         {!p.showSpeed && !p.showAmps ? <span className="n dim">{q.run ? 'ON' : 'OFF'}</span> : null}
       </div>
@@ -292,11 +296,11 @@ function TankCard({ id, s, level }: { id: string; s: S; level: number }) {
   return (
     <Card id={id} s={s} className={`eq${alarm ? ' lvlhi' : ''}`}>
       <div className="eq-top">
-        <span className="eq-name">{BY_ID[id].name}</span>
+        <span className="eq-name">{nameOf(p, id)}</span>
         <span className={`state${alarm ? ' hi' : ''}`}>{alarm ? 'LEVEL HI' : 'NORMAL'}</span>
       </div>
       <div className="eq-vals">
-        <span className="n">{level.toFixed(1)}<u>%</u></span>
+        <span className="n">{level.toFixed(1)}<u>{unitsOf(p, '%')}</u></span>
         {p.showVolume ? <span className="n sm">{fmt(level * 200)}<u>gal</u></span> : null}
       </div>
       <div className="gauge">
@@ -312,7 +316,7 @@ function ValveCard({ id, s, open }: { id: string; s: S; open: number }) {
   return (
     <Card id={id} s={s} className="eq">
       <div className="eq-top">
-        <span className="eq-name">{BY_ID[id].name}</span>
+        <span className="eq-name">{nameOf(p, id)}</span>
         <span className="state">{open > 5 ? 'OPEN' : 'CLOSED'}</span>
       </div>
       <div className="eq-vals">
@@ -328,11 +332,11 @@ function FlowCard({ s }: { s: S }) {
   return (
     <Card id="FT301" s={s} className={`eq${warn ? ' warn' : ''}`}>
       <div className="eq-top">
-        <span className="eq-name">FT-301</span>
+        <span className="eq-name">{nameOf(p, 'FT301')}</span>
         <span className="state">{warn ? 'LOW FLOW' : 'FLOW'}</span>
       </div>
       <div className="eq-vals">
-        <span className="n">{fmt(s.plant.flow)}<u>GPM</u></span>
+        <span className="n">{fmt(s.plant.flow)}<u>{unitsOf(p, 'GPM')}</u></span>
         {p.showTotal ? <span className="n sm">1.24<u>M gal today</u></span> : null}
       </div>
     </Card>
@@ -353,7 +357,7 @@ function Trend({ s }: { s: S }) {
   return (
     <Card id="trend" s={s} className="card trend">
       <div className="chead">
-        <span>Levels · last {range}</span>
+        <span>{str(p.label) ?? 'Levels'} · last {range}</span>
         <span className="legend">
           <span><i className="lg l1" />T-101</span>
           <span><i className="lg l2" />T-102</span>
