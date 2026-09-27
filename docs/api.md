@@ -9,15 +9,23 @@ pip install -r server/requirements.txt
 python -m uvicorn server.app:app --port 8000
 ```
 
-Environment variables (all optional): `FACEPLATE_FORCE_RULES=1` skips the model and always uses the rules engine. `FACEPLATE_MODEL_TIMEOUT=25` sets the number of seconds to wait for the model before falling back.
+Environment variables (all optional): `FACEPLATE_FORCE_RULES=1` skips every LLM and always uses the rules engine. `FACEPLATE_MODEL_TIMEOUT=25` sets the seconds to wait for the River model. `FACEPLATE_THINK_TIMEOUT=40` sets the seconds to wait for GBrain `think`.
+
+## How /api/edit decides
+
+1. **River LoRA model** (`model/edit_model.py`), only when `RIVER_API_KEY` is set and the instruction is not a question. Used if it returns a valid, non-empty patch. `model: "qwen-lora"`.
+2. **GBrain `think`** (LLM over team memory, billed to the GBrain credit). This is the primary engine when there is no River key. One call per request, with `rounds: 1` and `save: false`. The prompt includes the component (name, type, path, `current_props`), the allowed patch keys and their types, and the instruction verbatim. `think` decides whether the request is a question or a change. `model: "gbrain-think"`. Typical latency is 5-15 s.
+3. **Rules engine fallback**, used when `think` fails or times out. Questions (what, why, how, explain, who) get `kind: "answer"` built from the top GBrain search snippets. For a change request, the keyword rules produce a patch only if a keyword actually matched. Otherwise the response is `kind: "answer"` with "I couldn't map that to a change for <name>. Try: ..." and two suggestions. It never returns a default or random patch. `model: "rules"`.
+
+Every patch is validated. Unknown keys are dropped, and values are coerced to the key's type. HI/LO limits (`hi`, `lo`, `showLimits`) are dropped unless the instruction mentions limits. Running green is forced to `#4A4A48`. If a patch is empty after validation, the response becomes `kind: "answer"`.
 
 ## GET /api/health
 
 ```json
-{ "ok": true, "gbrain": true, "model": "rules" }
+{ "ok": true, "gbrain": true, "model": "gbrain-think" }
 ```
 
-`model` is `"qwen-lora"` when `model/edit_model.py` imports, otherwise `"rules"`.
+`model` is `"qwen-lora"` when `RIVER_API_KEY` is set and `model/edit_model.py` imports. It is `"gbrain-think"` when GBrain is reachable and there is no River key. It is `"rules"` when GBrain is down or `FACEPLATE_FORCE_RULES=1`.
 
 ## POST /api/edit
 
@@ -30,29 +38,49 @@ Request:
   "component_path": "root/Pumps/P-102",
   "component_name": "P-102",
   "instruction": "show running state per our standard",
-  "current_props": {}
+  "current_props": {},
+  "suggestions": ["Show running state per our standard", "Add speed % and amps under the pump"]
 }
 ```
 
-`current_props` is optional.
+`current_props` and `suggestions` are optional. `suggestions` are the component's two suggestion chips. They are used in the "couldn't map that" answer, and the backend has its own defaults.
 
-Response:
+Response for a change (`kind: "patch"`):
 
 ```json
 {
+  "kind": "patch",
   "patch": { "runFill": "#4A4A48", "runLabel": "RUN", "faultColor": "#E0301E" },
-  "rationale": "Per HMI Style Guide (ISA-101) (hmi/style-guide): running equipment uses a dark gray #4A4A48 fill with a white label, never green, so P-102 gets runFill #4A4A48, runLabel RUN, faultColor #E0301E.",
+  "answer": "",
+  "rationale": "ISA-101 standard: running = dark gray #4A4A48 with white \"RUN\" label, fault red #E0301E, never green [hmi/style-guide], matching the prior P-102 decision [decisions/log].",
   "rules_cited": [
     { "slug": "hmi/style-guide", "title": "HMI Style Guide (ISA-101)", "snippet": "Running state (e.g. a running pump): dark gray fill #4A4A48 with a white label." }
   ],
-  "model": "rules",
-  "latency_ms": 755
+  "model": "gbrain-think",
+  "latency_ms": 5475
 }
 ```
 
-- `patch` is always non-empty. Merge it into the component's props.
-- `rules_cited` holds up to 3 GBrain hits. It is `[]` if GBrain is unreachable.
-- `model` is `"qwen-lora"` or `"rules"`.
+Response for a question, or for a change that the allowed keys can't express (`kind: "answer"`):
+
+```json
+{
+  "kind": "answer",
+  "patch": {},
+  "answer": "\"ms\" (milliseconds) is a time unit and isn't a valid unit for a tank level display. T-102's level is a percentage from the LevelPct tag [plant/station-01-tags] ... I can change units to another level unit (%, ft, gal) or switch showVolume on.",
+  "rationale": "",
+  "rules_cited": [ { "slug": "plant/station-01-tags", "title": "Station 01 Tags", "snippet": "..." } ],
+  "model": "gbrain-think",
+  "latency_ms": 11162
+}
+```
+
+- `kind` is `"patch"` or `"answer"`. Only offer Accept for `"patch"`.
+- `patch` is non-empty when `kind` is `"patch"` and `{}` when `kind` is `"answer"`. Merge it into the component's props.
+- `answer` is plain text (2-5 sentences, may contain `[page/slug]` citations) for `"answer"`, and `""` for `"patch"`.
+- `rationale` is one sentence for `"patch"` and `""` for `"answer"`.
+- `rules_cited` holds the top 3 GBrain search hits, plus any page slugs `think` cited (`snippet: "Cited by GBrain think."`), up to 5 in total. It is `[]` if GBrain is unreachable.
+- `model` is `"gbrain-think"`, `"qwen-lora"` or `"rules"`.
 
 ## POST /api/accept
 
@@ -118,6 +146,8 @@ Decisions are listed newest first. Older free-text lines have `component`, `inst
 | `ia.symbol.valve` | `showOpenPct` (bool) |
 | `ia.symbol.sensor` | `showTotal` (bool), `warnBelow` (number \| null) |
 | containers (`ia.container.*`, anything unrecognized) | `note` (string) |
+
+Every non-container type also accepts `units` (string) and `label` (string).
 
 Colors follow ISA-101:
 

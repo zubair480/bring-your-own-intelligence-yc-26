@@ -643,21 +643,43 @@ def build_think_prompt(req: "EditReq", fam: str, props: dict) -> str:
         f"ALLOWED patch keys for this component (no others exist):\n{key_lines}\n\n"
         f'User instruction (verbatim): "{req.instruction}"\n\n'
         "Decide if this is a QUESTION (explain, what, why, how, who) or a CHANGE request. "
-        "Reply with ONLY one JSON object, no prose, no code fences:\n"
-        '{"kind":"answer","answer":"<2-5 plain sentences grounded in team memory, cite page slugs>"}\n'
+        "Your answer text must be exactly ONE of these two forms, nothing else:\n"
+        "ANSWER: <2-5 plain sentences grounded in team memory, cite page slugs like [hmi/style-guide]>\n"
         "or\n"
-        '{"kind":"patch","patch":{<only allowed keys>},"rationale":"<one sentence naming the team rule used>"}\n'
+        'PATCH: {"<allowed key>": <value>, ...} RATIONALE: <one sentence naming the team rule used, cite its [slug]>\n'
+        "The PATCH object is JSON and may use only the allowed keys. "
         "Never change HI/LO limits unless explicitly asked. Follow the ISA-101 style guide and tag "
         "conventions (tags are [default]Station01/<Equip>/<Point>; running = #4A4A48 never green, "
         "alarm high #E0301E, warning #F5A623). If the change can't be expressed with the allowed keys, "
-        "reply kind=answer explaining what IS possible."
+        "reply with the ANSWER form explaining what IS possible."
     )
 
 
 def extract_json_obj(text: str) -> Optional[dict]:
-    """Find the first JSON object with kind/patch/answer in text (handles fences and prose)."""
+    """Parse think's answer text into {kind, patch|answer, rationale}.
+
+    Understands the PATCH:/ANSWER: forms, then any JSON object with kind/patch/answer,
+    even when wrapped in prose or code fences.
+    """
     if not text:
         return None
+    m = re.search(r"PATCH\s*:\s*", text)
+    if m:
+        body = re.sub(r"```(?:json)?", "", text[m.end():])
+        i = body.find("{")
+        if i >= 0:
+            try:
+                patch, end = json.JSONDecoder().raw_decode(body[i:])
+                rest = body[i + end:]
+                r = re.search(r"RATIONALE\s*:\s*(.*)", rest, flags=re.S)
+                rat = (r.group(1) if r else rest).strip()
+                if isinstance(patch, dict):
+                    return {"kind": "patch", "patch": patch, "rationale": re.sub(r"\s+", " ", rat)[:400]}
+            except ValueError:
+                pass
+    m = re.match(r"\s*ANSWER\s*:\s*(.*)", text, flags=re.S)
+    if m:
+        return {"kind": "answer", "answer": m.group(1).strip()}
     candidates = [text] + re.findall(r"```(?:json)?\s*(.*?)```", text, flags=re.S)
     dec = json.JSONDecoder()
     for cand in candidates:
@@ -710,7 +732,7 @@ def call_think(question: str) -> tuple[Optional[dict], str, list[str]]:
         raw_answer = outer.get("answer")
         for cit in outer.get("citations") or []:
             s = cit.get("page_slug") if isinstance(cit, dict) else None
-            if s and s not in slugs:
+            if s and "/" in s and s not in slugs:
                 slugs.append(s)
         if isinstance(raw_answer, dict):
             obj, answer_text = raw_answer, json.dumps(raw_answer)
@@ -737,7 +759,8 @@ def merge_cited(cited: list[dict], slugs: list[str]) -> list[dict]:
 
 
 def clean_answer(text: str) -> str:
-    t = re.sub(r"```.*?```", "", text or "", flags=re.S).strip()
+    t = re.sub(r"```.*?```", "", text or "", flags=re.S).strip().replace("�", "-")
+    t = re.sub(r"^\s*ANSWER\s*:\s*", "", t)
     return re.sub(r"\s+", " ", t)[:1200]
 
 
