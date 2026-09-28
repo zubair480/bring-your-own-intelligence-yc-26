@@ -36,6 +36,8 @@ The result:
 
 ## Architecture
 
+![Faceplate architecture: River, GBrain and QM](docs/architecture.png)
+
 ```mermaid
 flowchart LR
   U[Engineer<br/>browser] -->|click + instruction| W[Faceplate UI<br/>React + Vite<br/>Cloudflare Pages]
